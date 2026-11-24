@@ -109,12 +109,12 @@ const GuildScenery = (() => {
       positions.set(p.id,{sprite:p.sprite,u,v:depth(u)+i*.35,hp:unit.hp,max:p.maxHP,carried:unit.state !== "ok"});
     }
     // Keep the defeated target on screen during the final blow.
-    const enemies = f?.enemies || [{id:impact?.target,kind:impact?.target === "caster" ? "crystal" : "boar",hp:0}];
+    const enemies = f?.enemies || [{id:impact?.target,kind:impact?.targetKind || (impact?.target === "caster" ? "crystal" : "boar"),hp:0}];
     for (const [i,e] of enemies.entries()) {
       if (!e.hp && e.id !== impact?.target) continue;
       const slot = f ? i : Number(e.id === "caster");
       const u = start+3.1+slot*2.5;
-      positions.set(e.id,{sprite:"boar",u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
+      positions.set(e.id,{sprite:Guild.foes[e.kind].sprite || "boar",u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
         enemy:true,crystal:e.kind === "crystal",casting:e.casting});
     }
     const target = positions.get(impact?.target);

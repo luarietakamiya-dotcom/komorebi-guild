@@ -1027,3 +1027,30 @@ test("捜索中のタイマーが同じ部屋で再始動し、再読込を越�
   assert.equal(game.state().phase,"report");
   assert.equal(game.state().history[0].unit[0].injury.kind,"遭難による負傷");
 });
+
+test("捕縛の救助要請を画面で受け、途中セーブから派遣と治療を完了できる", t => {
+  const s=Guild.initial();
+  s.gold=1500;
+  s.history.push({dungeon:"moss",cleared:true,path:["gate","home"],log:[]});
+  Guild.depart(s,s,{party:["mina"],leader:"mina",dungeon:"canal",policy:"bold",meds:1},true);
+  s.trip.unit[0].hp=1;
+  t.mock.method(Math,"random",()=>.005);
+  let game=openGame(JSON.stringify(s));
+  game.tick(); game.tick();
+  assert.match(game.html("#screen"),/救助隊を派遣/);
+  assert.equal(game.state().trip.rescue.dispatched,false);
+  game.click("dispatch-rescue",undefined,"1");
+  game.tick();
+  game=game.reload();
+  game.tick(); game.tick();
+  assert.equal(game.state().phase,"report");
+  game.click("plot","hill");
+  game.click("build-landmark","cathedral");
+  game.click("character","mina");
+  assert.match(game.html("#dialog-body"),/療養を発症から4週に短縮/);
+  game.click("cure-debuff","pregnancy");
+  assert.equal(game.state().roster[0].recovery.pregnancy,5);
+  const restored=game.reload();
+  restored.click("character","mina");
+  assert.match(restored.html("#dialog-body"),/大聖堂で治療中/);
+});

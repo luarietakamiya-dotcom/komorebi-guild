@@ -117,7 +117,8 @@ test("未使用薬を財布と金庫にそれぞれ返し、他隊の在庫を�
   assert.equal(G.guildGold(s),guild-36);
 });
 
-test("深層の宝箱・番獣だけが別々の一点物を落とし、履歴と所有者を保持する", () => {
+test("深層の宝箱・番獣だけが別々の一点物を落とし、履歴と所有者を保持する", t => {
+  t.mock.method(Math,"random",()=>.8); // 宝箱と番獣まで、途中の罠を踏まずに進む。
   let s=G.initial();
   G.depart(s); finish(s); G.nextWeek(s);
   G.configure(s,s.party,"mina","gather",0,s,"canal");

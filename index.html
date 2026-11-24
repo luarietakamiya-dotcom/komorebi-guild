@@ -972,8 +972,8 @@ const Guild = (() => {
   }
   const items = { herb: { name: "薬草", price: 10 }, ore: { name: "鉱石", price: 24 } };
   const landmarks = {
-    castle:{name:"お城", effect:"騎士団が街道で自動迎撃。転送罠の行方不明者を1手で救出し、長い捜索による負傷を防ぐ。"},
-    cathedral:{name:"大聖堂", effect:"消失までの死亡回数が3回から5回に。治療費120 Gで身体欠損や呪いを完治。"},
+    castle:{name:"お城", effect:"騎士団が街道で自動迎撃。行方不明者の捜索や捕虜の救出に、派遣から1手で到着。"},
+    cathedral:{name:"大聖堂", effect:"消失までの死亡回数が3回から5回に。120 Gで欠損や呪いを完治。精神崩壊の治療と妊娠の療養短縮も可能。"},
     academy:{name:"大図書館・学院", effect:"上位職の技を転職前から習得でき、昇級試験の合格率が20ポイント上昇。出発前に古地図で分岐の先を読める。"},
     observatory:{name:"天文台", effect:"襲撃を前週から観測し、進路・敵数・ヌシの有無を特定。吉の週には宝箱から鉱石を追加回収。どの職業でも罠を感知できる。"},
     manufactory:{name:"大工房", effect:"営業中の全工房に毎週1点の技術経験。注文品の品質と主効果が2段階上がり、義肢の補正も向上。"},
@@ -998,12 +998,20 @@ const Guild = (() => {
   const debuffs = {
     arm:{name:"腕の欠損", axes:["atk","dex"], limb:"義手"},
     leg:{name:"脚の欠損", axes:["atk","spd"], limb:"義足"},
-    curse:{name:"封印の呪い", axes:["magic","spirit"]}
+    eye:{name:"目の欠損", axes:["dex","def"], limb:"義眼"},
+    curse:{name:"封印の呪い", axes:["magic","spirit"]},
+    burden:{name:"鈍重の呪い", axes:["spd","dex"]},
+    breakdown:{name:"精神崩壊", axes:["spirit","magic"], treatmentWeeks:4},
+    pregnancy:{name:"妊娠", axes:[], duration:12, treatmentWeeks:4}
   };
   const cureCost = 120, limbCost = 25;
+  const prosthesisQuality = s => {
+    const shop = s.town.workshops.hall;
+    return shop.level + craftBonus(shop) + craftSupport(s);
+  };
   function prosthesisBonus(s) {
     const smith = s.town.workshops.hall;
-    return Math.min(80,5 + 15*(smith.level-1) + 6*smith.skills.length + craftBonus(smith) + 10*craftSupport(s));
+    return Math.min(80,5 + 10*(prosthesisQuality(s)-1) + 5*(smith.level-1) + 6*smith.skills.length);
   }
   function treatDebuff(s,id,kind,prosthesis = false) {
     const p = trainingMember(s,id);
@@ -1018,9 +1026,27 @@ const Guild = (() => {
       record(p,s.week,debuffs[kind].limb+"を装着。補正＋"+bonus+"％。");
     } else {
       check(s.town.landmark === "cathedral","治療には大聖堂が必要です。");
+      const weeks = debuffs[kind].treatmentWeeks;
+      check(!weeks || !p.treatment[kind],"すでに治療を受けています。");
       spend(s,null,cureCost);
+      if (weeks) {
+        p.treatment[kind] = kind === "pregnancy" ? p.recovery[kind] - debuffs[kind].duration + weeks : s.week + weeks;
+        p.recovery[kind] = p.treatment[kind];
+        record(p,s.week,"大聖堂で"+debuffs[kind].name+"の治療を開始。");
+        finishRecovery(p,s.week);
+      } else {
+        delete p.debuffs[kind];
+        record(p,s.week,"大聖堂で"+debuffs[kind].name+"が完治。");
+      }
+    }
+  }
+  function finishRecovery(p,week) {
+    for (const [kind,due] of Object.entries(p.recovery || {})) {
+      if (week < due) continue;
+      delete p.recovery[kind];
+      delete p.treatment[kind];
       delete p.debuffs[kind];
-      record(p,s.week,"大聖堂で"+debuffs[kind].name+"が完治。");
+      record(p,week,debuffs[kind].name+"の療養を終えた。");
     }
   }
 
@@ -1649,6 +1675,13 @@ const Guild = (() => {
     p.spentMP ??= 0;
     p.deaths ??= 0;
     p.debuffs ??= {};
+    p.recovery ??= {};
+    p.treatment ??= {};
+    if (!p.sex) {
+      const serial = /^(?:guest|child)-(\d+)$/.exec(p.id);
+      p.sex = serial ? (Number(serial[1])%2 ? "female" : "male") :
+        ["mina","yuria"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
+    }
     p.injury ??= null;
     p.leaveWeek ??= 0;
     p.gambits = Array.isArray(p.gambits) ? p.gambits.slice(0,gambitLimit) : [];
@@ -1989,7 +2022,8 @@ const Guild = (() => {
     p.job = job.next;
     record(p, s.week, job.name + "から" + jobs[p.job].name + "に転職。");
   }
-  const available = (s, p) => !!p && !p.departure && p.readyWeek <= s.week && p.leaveWeek !== s.week;
+  const fitWeek = p => Math.max(p.readyWeek,p.recovery?.pregnancy || 0);
+  const available = (s, p) => !!p && !p.departure && fitWeek(p) <= s.week && p.leaveWeek !== s.week;
   const damage = (atk, factor, def) => Math.max(1, Math.floor(atk * factor - def * 0.5));
   // The original top-level party remains party 1, including in existing saves.
   const maxParties = 5;
@@ -2186,6 +2220,8 @@ const Guild = (() => {
     const skill = data.initialSkill ?? jobs[data.job].skills[0];
     check(jobs[data.job].skills.includes(skill), "職業の初期スキルを選んでください。");
     const p = makePerson("custom", name, data.job, data.trait, clean(data.pronoun, 12) || "私", data.tone, clean(data.master, 16) || "マスター", clean(data.ending, 12), {species:race,age}, skill);
+    check(["male","female","unspecified"].includes(data.sex ?? p.sex),"性別を選んでください。");
+    p.sex = data.sex ?? p.sex;
     p.birthdayWeek = weekOfYear(calendarDate(s));
     p.backstory = String(data.backstory ?? "");
     setCharacterNames(p, data);
@@ -2470,13 +2506,16 @@ const Guild = (() => {
   const foes = {
     boar:enemy,
     crystal:{name:"晶角イノシシ", hp:18, atk:18, def:5, spd:6},
-    warden:{name:"双月角の番獣", hp:32, atk:33, def:7, spd:9}
+    warden:{name:"双月角の番獣", hp:32, atk:33, def:7, spd:9},
+    goblin:{name:"ゴブリン", hp:16, atk:26, def:4, spd:11, captor:true, pregnancy:.01, sprite:"shion"},
+    orc:{name:"オーク", hp:27, atk:34, def:7, spd:8, captor:true, pregnancy:.10, sprite:"gald"},
+    bandit:{name:"盗賊団員", hp:22, atk:28, def:5, spd:12, captor:true, sprite:"shusai"}
   };
   const allySelectors = s => ({self:"自分", lowest:"残HPが最も低い味方", leader:"リーダー",
     ...Object.fromEntries(s.roster.map(p => [p.id,p.name]))});
   const subjects = s => ({...allySelectors(s), lowest:"味方の誰か", foe:"敵のいずれか"});
   const enemySelectors = {nearest:"最も近い敵", strongest:"残HPが最も高い敵", casting:"詠唱中の敵",
-    boar:enemy.name, crystal:foes.crystal.name, warden:foes.warden.name};
+    ...Object.fromEntries(Object.entries(foes).map(([id,e]) => [id,e.name]))};
   const actionList = p => ({...actions,...Object.fromEntries(p.skills.map(id => [id,abilities[id].name]))});
   function targets(s, action, actorId) {
     if (action === "flee") return {self:"自分"};
@@ -2527,8 +2566,10 @@ const Guild = (() => {
       u.state = "severe";
       if (!u.injury) injure(s,t,u,"重度の捻挫",2);
     }
-    const boss = t.dungeon !== "moss" && tripRooms(t)[t.node].depth === dungeons[t.dungeon].floors;
-    const enemies = [newFoe("enemy",boss ? "warden" : "boar")];
+    const floor = tripRooms(t)[t.node].depth;
+    const boss = t.dungeon !== "moss" && floor === dungeons[t.dungeon].floors;
+    const kind = t.dungeon === "moss" ? "boar" : boss ? "warden" : ["goblin","orc","bandit"][(floor-1)%3];
+    const enemies = [newFoe("enemy",kind)];
     if (t.dungeon !== "moss" || (t.node === "vein" && t.policy === "bold")) enemies.push(newFoe("caster","crystal"));
     t.fight = {enemies, turn:0, order:[], guards:{}, haste:{}, shaken:{}, covers:{}};
     eachPair(t.unit.filter(u => u.state === "ok").map(u => u.id),(a,b) => bondTime(s,a,b,4));
@@ -2554,6 +2595,8 @@ const Guild = (() => {
   }
   function combatLog(t,message,actor,target,kind,amount,rule,protectedId) {
     const event = {actor,target,kind,amount};
+    const foe = t.fight?.enemies.find(e => e.id === target);
+    if (foe && foes[foe.kind].sprite) event.targetKind = foe.kind;
     if (rule) event.rule = rule;
     if (protectedId) event.protectedId = protectedId;
     log(t,message,{combat:event});
@@ -2652,7 +2695,7 @@ const Guild = (() => {
   function enemyTurn(s,team,e,round) {
     const t = team.trip, f = t.fight, stats = foes[e.kind];
     const intended = t.unit.filter(u => u.state === "ok").sort((a,b) => a.hp-b.hp)[0];
-    if (!intended) return settle(s,team,"全員を救助して帰還");
+    if (!intended) return defeatedParty(s,team);
     if (e.kind === "crystal" && !e.casting) {
       e.casting = true;
       return combatLog(t,stats.name + "が晶鳴りを詠唱。",e.id,e.id,"cast",0);
@@ -2681,14 +2724,18 @@ const Guild = (() => {
       for (const [actor,ally] of Object.entries(f.covers))
         if (actor === target.id || ally === target.id) delete f.covers[actor];
       target.state = "down";
+      if (stats.pregnancy && Math.random() < stats.pregnancy) suffer(s,t,target,"pregnancy",stats.name+"との戦闘");
       p.deaths++;
       const message = p.name + "が" + tripRooms(t)[t.node].name + "で瀕死に。死亡" + p.deaths + "回目。";
       log(t,message); record(p,s.week,message);
+      const captured = !t.unit.some(u => u.state === "ok") && f.enemies.some(e => e.hp && foes[e.kind].captor);
       if (p.deaths >= deathThreshold(s)) {
         target.state = "lost";
+        if (captured) return defeatedParty(s,team);
         return settle(s,team,p.name + "の消失により遠征を打ち切り帰還");
       }
       if (p.deaths === deathThreshold(s)-1 || e.kind === "crystal") injure(s,t,target,"骨折",4);
+      if (captured) return defeatedParty(s,team);
       beginCall(s,team,"crisis",target.id);
     }
   }
@@ -2709,7 +2756,7 @@ const Guild = (() => {
       }
       break;
     }
-    if (team.phase !== "explore" || t.pending) return;
+    if (team.phase !== "explore" || t.pending || t.rescue) return;
     if (f.enemies.some(e => e.hp > 0)) {
       if (f.turn >= 10*f.order.length) settle(s,team,"10ラウンドで退路を確保し帰還");
       return;
@@ -2738,13 +2785,16 @@ const Guild = (() => {
   function battle(s,team) {
     while (team.trip.fight && !team.trip.pending) battleTurn(s,team);
   }
-  // Ancient passages use transfer seals, blade floors and cursed altars.
+  const trapNames = {crush:"圧殺の回廊", blade:"刃の床", illusion:"幻惑の間", altar:"呪いの祭壇",
+    transfer:"転送の罠", gas:"捕縛のガス室", blast:"爆裂の仕掛け", confiscate:"没収の間",
+    monster:"モンスターハウス", tentacle:"触手トラップ"};
   const trapAt = (dungeon,id) => {
     if (dungeon === "moss") return;
     const [floor,room] = id.split("-");
     if (dungeon === "archive" && room === "gallery" && Number(floor)%3 === 1) return "transfer";
-    if (room === "gallery") return Number(floor)%2 ? "curse" : "leg";
-    if (room === "cache" && Number(floor)%2 === 0) return "arm";
+    if (room === "gallery") return ["altar","blade","illusion","gas"][(Number(floor)-1)%4];
+    if (room === "cache" && Number(floor)%2 === 0) return Number(floor)%4 === 0 ? "confiscate" : "crush";
+    if (room === "index") return Number(floor)%2 ? "blast" : "gas";
   };
   const canDetectTrap = (s,p) => s.town.landmark === "observatory" || !!jobs[p.job].detect;
   const luckyWeek = week => week % 4 < 2;
@@ -2757,7 +2807,54 @@ const Guild = (() => {
       return n.name+"（"+({herb:"薬草",grove:"採集",fight:"戦闘"}[n.event] || "通路")+"）";
     });
   }
-  function enterTrap(s,team,kind) {
+  function suffer(s,t,u,kind,source) {
+    const p = person(s,u.id);
+    if (kind === "pregnancy") {
+      p.recovery[kind] = s.week + debuffs[kind].duration;
+      delete p.treatment[kind];
+    } else if (Object.hasOwn(p.debuffs,kind)) return;
+    p.debuffs[kind] = 0;
+    u.mp = Math.min(u.mp,maxMP(p));
+    const until = p.recovery[kind] ? "。第"+p.recovery[kind]+"週まで療養" : "";
+    const message = p.name+"は"+source+"で"+debuffs[kind].name+until+"。";
+    record(p,s.week,message);
+    log(t,message);
+  }
+  function defeatedParty(s,team) {
+    const t = team.trip, survivors = t.unit.filter(u => u.state !== "lost");
+    const captor = t.fight.enemies.find(e => e.hp > 0 && foes[e.kind].captor);
+    if (!captor || !survivors.length) return settle(s,team,"全滅により遠征を終了");
+    t.fight = null;
+    delete t.effects;
+    for (const u of survivors) u.state = "captured";
+    t.rescue = {elapsed:0, travel:0, dispatched:false};
+    log(t,foes[captor.kind].name+"に隊が捕縛された。ギルドの救助指示を待っています。");
+  }
+  function damageBaggage(s,team,all) {
+    const t = team.trip;
+    for (const key of Object.keys(t.cargo)) t.cargo[key] = all ? 0 : Math.floor(t.cargo[key]/2);
+    t.meds = all ? 0 : Math.floor(t.meds/2);
+    if (t.packed) {
+      // Settlement refunds bought medicine before returning unused packed items.
+      t.packed.medicine.length = Math.min(t.packed.medicine.length,Math.max(0,t.meds-t.quote.medicine/30));
+      t.packed.spark = t.packed.tonic = null;
+    }
+    t.spark = t.tonic = false;
+    if (!all) return;
+    const owner = partyNumber(s,team);
+    for (const key of Object.keys(team.bag.materials)) useMaterial(s,key,team,team.bag.materials[key]);
+    team.bag.supplies = supplyCounts();
+    team.bag.lots = [];
+    s.gold -= team.wallet;
+    team.wallet = 0;
+    s.equipment = s.equipment.filter(item => item.owner !== owner && !team.party.includes(item.wearer));
+    if (s.weapon && (s.weaponOwner === owner || team.party.includes(s.wielder))) {
+      s.weapon = false;
+      s.wielder = null;
+      s.weaponOwner = 0;
+    }
+  }
+  function enterTrap(s,team,roomTrap) {
     const t = team.trip, active = t.unit.filter(u => u.state === "ok");
     const scout = active.find(u => canDetectTrap(s,person(s,u.id)));
     if (scout) {
@@ -2765,42 +2862,102 @@ const Guild = (() => {
       return;
     }
     const risk = .12*dungeons[t.dungeon].level + (luckyWeek(s.week) ? 0 : .15);
+    let confiscated = false;
     for (const u of active) {
       if (Math.random() >= risk) continue;
-      const p = person(s,u.id);
-      if (kind === "transfer") {
-        t.rescue = {id:u.id,elapsed:0};
-        u.state = "missing";
-        log(t,p.name+"が転送罠で行方不明。救助隊が捜索を開始。");
-        return;
-      }
-      if (!Object.hasOwn(p.debuffs,kind)) {
-        p.debuffs[kind] = 0;
-        const message = p.name+"が罠で"+debuffs[kind].name+"を負った。";
-        record(p,s.week,message);
-        log(t,message);
-        u.mp = Math.min(u.mp,maxMP(p));
+      const roll = Math.random();
+      const kind = roll >= .99 ? "monster" : roll >= .96 ? "tentacle" : roomTrap;
+      const p = person(s,u.id), name = trapNames[kind];
+      switch (kind) {
+        case "monster":
+          p.deaths++;
+          u.state = "lost";
+          u.hp = 0;
+          log(t,p.name+"は"+name+"で死亡した。");
+          record(p,s.week,name+"で死亡。");
+          break;
+        case "tentacle":
+          suffer(s,t,u,"pregnancy",name);
+          u.state = "resting";
+          break;
+        case "transfer": case "gas":
+          u.state = kind === "transfer" ? "missing" : "captured";
+          t.rescue ??= {elapsed:0,travel:0,dispatched:kind === "transfer"};
+          log(t,p.name+"が"+name+"で"+(kind === "transfer" ? "行方不明。救助隊が捜索を開始。" : "捕縛された。救助隊の派遣を要請。"));
+          break;
+        case "confiscate":
+          if (!confiscated) damageBaggage(s,team,true);
+          confiscated = true;
+          log(t,p.name+"が"+name+"にかかり、隊の所持品をすべて失った。");
+          break;
+        case "blast":
+          damageBaggage(s,team,false);
+          log(t,name+"で携行品が損傷した。");
+          suffer(s,t,u,"eye",name);
+          break;
+        case "crush": suffer(s,t,u,sample(["arm","leg","eye"]),name); break;
+        case "blade": suffer(s,t,u,"leg",name); break;
+        case "illusion": suffer(s,t,u,"breakdown",name); break;
+        case "altar": suffer(s,t,u,sample(["curse","burden"]),name); break;
       }
     }
+    if (!t.rescue && !t.unit.some(u => u.state === "ok")) settle(s,team,"罠で探索の続行が困難になり遠征を終了");
+    return confiscated;
+  }
+  const rescueGrace = 6;
+  function dispatchRescue(s,team = s) {
+    const search = team.trip?.rescue;
+    check(team.phase === "explore" && search?.dispatched === false,"派遣待ちの救助要請がありません。");
+    search.dispatched = true;
+    log(team.trip,"ギルドの指示で救助隊を派遣。");
+  }
+  function captivityHarm(s,t,u) {
+    const p = person(s,u.id);
+    if (Math.random() < .02) {
+      p.deaths++;
+      u.state = "lost";
+      u.hp = 0;
+      log(t,p.name+"が捕縛中に死亡した。");
+      record(p,s.week,"捕縛中に死亡。");
+      return;
+    }
+    if (Math.random() < .30) {
+      const kind = Math.random() < .5 ? "breakdown" : sample(["arm","leg","eye"]);
+      suffer(s,t,u,kind,"捕縛");
+    }
+    if (p.sex === "female" && Math.random() < .30) suffer(s,t,u,"pregnancy","捕縛");
   }
   function rescueStep(s,team) {
     const t = team.trip, search = t.rescue;
-    const u = t.unit.find(unit => unit.id === search.id);
-    search.elapsed++;
+    // Older transfer saves already have a search in progress.
+    search.dispatched ??= true;
+    search.travel ??= search.elapsed;
+    if (search.dispatched || search.elapsed <= rescueGrace) search.elapsed++;
+    else return;
     const knights = s.town.landmark === "castle";
-    if (!knights && search.elapsed < 3) {
-      log(t,"救助隊が捜索中（"+search.elapsed+"/3手）。");
+    if (search.dispatched) search.travel++;
+    if (search.elapsed === rescueGrace+1) {
+      for (const u of t.unit.filter(u => u.state === "captured")) captivityHarm(s,t,u);
+    }
+    const waiting = t.unit.filter(u => ["missing","captured"].includes(u.state));
+    if (waiting.length && (!search.dispatched || search.travel < (knights ? 1 : 3))) {
+      if (search.dispatched) log(t,"救助隊が捜索中（"+search.travel+"/3手）。");
       return;
     }
-    const message = (knights ? "城の騎士団" : "救助隊")+"が"+person(s,u.id).name+"を発見。";
-    log(t,message);
-    u.state = "ok";
-    if (search.elapsed >= 3) {
-      u.state = "severe";
-      injure(s,t,u,"遭難による負傷",3);
-    }
     delete t.rescue;
-    settle(s,team,message+"全員で帰還");
+    if (!waiting.length) return settle(s,team,"救助対象者の死亡により遠征を終了");
+    const message = (knights ? "城の騎士団" : "救助隊")+"が"+waiting.map(u => person(s,u.id).name).join("・")+"を救出。";
+    for (const u of waiting) {
+      const missing = u.state === "missing";
+      u.state = u.hp > 0 ? "ok" : "down";
+      if (person(s,u.id).recovery.pregnancy) u.state = "resting";
+      if (missing && search.elapsed >= 3) {
+        u.state = "severe";
+        injure(s,t,u,"遭難による負傷",3);
+      }
+    }
+    log(t,message);
+    settle(s,team,message+"帰還");
   }
   const emergencyParty = s => parties(s).find(team => team.trip?.pending?.type === "crisis");
   function step(s, team = s) {
@@ -2817,8 +2974,8 @@ const Guild = (() => {
     for (const u of t.unit) recordDepth(person(s,u.id), t, s.week);
     const n = tripRooms(t)[t.node];
     const trap = trapAt(t.dungeon,t.node);
-    if (trap) enterTrap(s,team,trap);
-    if (t.rescue) return;
+    const confiscated = trap && enterTrap(s,team,trap);
+    if (t.rescue || team.phase !== "explore") return;
     switch (n.event) {
       case "herb": {
         const hunter = t.unit.some(u => jobs[person(s, u.id).job].forage);
@@ -2827,6 +2984,7 @@ const Guild = (() => {
       }
       case "grove": t.cargo.herb += 2; t.cargo.ore++; log(t, "採集路で薬草2個・露出した鉱石1個を採集。"); break;
       case "treasure": {
+        if (confiscated) break;
         const omen = s.town.landmark === "observatory" && luckyWeek(s.week);
         t.cargo.ore += omen ? 4 : 3;
         log(t,n.name + "の宝箱から鉱石3個を回収。" + (omen ? "吉兆の星図をたどり、さらに1個発見。" : ""));
@@ -2843,7 +3001,7 @@ const Guild = (() => {
     if (!c) return [];
     if (c.type === "fork") return [...tripRooms(t)[t.node].next, "return", "delegate"];
     const injured = t.unit.find(u => u.id === c.target)?.injury;
-    return [...(t.meds > 0 && !injured ? ["med"] : []), ...(t.unit.some(u => u.state === "ok") ? ["carry"] : []), "return", "delegate"];
+    return [...(t.meds > 0 && !injured && !person(s,c.target).recovery.pregnancy ? ["med"] : []), ...(t.unit.some(u => u.state === "ok") ? ["carry"] : []), "return", "delegate"];
   }
   function reply(s, choice, team = s) {
     check(team.phase === "explore" && choices(s, team).includes(choice), "この指示は選べません。");
@@ -2972,6 +3130,7 @@ const Guild = (() => {
         record(p, s.week, "Lv." + p.level + "に成長。能力ポイント＋2。");
       }
       p.readyWeek = Math.max(p.readyWeek,s.week + (u.state === "severe" && !u.injury ? 2 : 1));
+      if (p.recovery.pregnancy) u.recoveryWeek = fitWeek(p);
       if (p.awaitingLastReturn) {
         u.endOfLife = true;
         endLifespan(s,p);
@@ -3188,7 +3347,7 @@ const Guild = (() => {
   }
   function raidDefenders(s) {
     const home = s.roster.filter(p => !awayMember(s,p.id));
-    return home.concat(visitorList(s).filter(p => !p.mission)).filter(p => !p.injury && currentHP(s,p)>0);
+    return home.concat(visitorList(s).filter(p => !p.mission)).filter(p => !p.injury && !p.recovery?.pregnancy && currentHP(s,p)>0);
   }
   function raidPost(road,index) {
     return Math.max(1, road.length-3-index%4);
@@ -3381,6 +3540,7 @@ const Guild = (() => {
     }
     settleGuestMissions(s);
     s.week++;
+    for (const p of [...s.roster,...s.alumni.filter(p => p.departure.kind === "retired")]) finishRecovery(p,s.week);
     advanceAges(s);
     growFamilies(s);
     s.unlocked = s.history.length > 0;
@@ -3400,7 +3560,7 @@ const Guild = (() => {
     }
     expireCalls(s);
   }
-  return { landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
+  return { dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
@@ -4199,12 +4359,12 @@ const GuildScenery = (() => {
       positions.set(p.id,{sprite:p.sprite,u,v:depth(u)+i*.35,hp:unit.hp,max:p.maxHP,carried:unit.state !== "ok"});
     }
     // Keep the defeated target on screen during the final blow.
-    const enemies = f?.enemies || [{id:impact?.target,kind:impact?.target === "caster" ? "crystal" : "boar",hp:0}];
+    const enemies = f?.enemies || [{id:impact?.target,kind:impact?.targetKind || (impact?.target === "caster" ? "crystal" : "boar"),hp:0}];
     for (const [i,e] of enemies.entries()) {
       if (!e.hp && e.id !== impact?.target) continue;
       const slot = f ? i : Number(e.id === "caster");
       const u = start+3.1+slot*2.5;
-      positions.set(e.id,{sprite:"boar",u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
+      positions.set(e.id,{sprite:Guild.foes[e.kind].sprite || "boar",u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
         enemy:true,crystal:e.kind === "crystal",casting:e.casting});
     }
     const target = positions.get(impact?.target);
@@ -4553,7 +4713,7 @@ try {
 let page = demo ? "hall" : "town", modal = "", draft = null, customImage = "", imageBusy = false, imageTicket = 0;
 const panes = { town: ["home","町の風景"], hall: ["scroll","ギルドホール"], roster: ["team","冒険者名簿"], shops: ["hammer","町のショップ"], mail: ["mail","伝書箱"], history: ["book","帰還記録"] };
 const labels = ["実力","信用","生存率","満足度"];
-const names = { ok: "無事", down: "戦闘不能", severe: "重傷", lost:"消失", missing:"行方不明" };
+const names = { ok: "無事", down: "戦闘不能", severe: "重傷", lost:"消失", missing:"行方不明", captured:"捕縛", resting:"療養中" };
 const money = n => `${n.toLocaleString("ja-JP")} <small>G</small>`;
 const signed = n => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
 const g = Guild;
@@ -4680,7 +4840,7 @@ function partyBoard(inHall) {
   const cards = teams().map((team, index) => {
     const status = team.leaveWeek === state.week ? "休暇中" : team.phase === "prep" ? "出発前" : team.phase === "report" ? "帰還済み" :
       team.trip.pending?.type === "crisis" ? "緊急通信" : team.trip.pending ? "伝書・返信待ち" :
-      team.trip.paused ? "一時停止" : "遠征中";
+      team.trip.rescue ? rescueStatus(team.trip) : team.trip.paused ? "一時停止" : "遠征中";
     return action("party", `<strong>${teamBadge(team)}</strong><span>${status} ・ ${team.wallet} G</span><small>${team.party.map(id => esc(who(id).name)).join("・") || "未編成"}</small>`,
       "team-card", `data-id="${index+1}" aria-pressed="${inHall && team === selected()}"`);
   }).join("");
@@ -4688,7 +4848,7 @@ function partyBoard(inHall) {
   const unlock = inHall && teams().length < g.maxParties ? action("unlock-party",
     `第${teams().length+1}隊を開設 ・ ${price} G`, "btn", g.guildGold(state) < price ? "disabled" : "") : "";
   const settings = inHall ? action("party-settings", icon("edit",15)+" 選択中の隊の設定", "btn") : "";
-  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征パーティー":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
+  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征パーティー":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
 }
 function morningControls() {
   const team = selected(), resting = team.leaveWeek === state.week;
@@ -4711,13 +4871,14 @@ function morningLetters(thisWeekOnly) {
 }
 function lifeStatus(p) {
   return `死亡 ${p.deaths}/${g.deathThreshold(state)}回` + (p.deaths >= g.deathThreshold(state)-1 ? "（次は永久消失）" : "") +
-    (p.injury ? ` ・ ${esc(p.injury.kind)}（第${p.readyWeek}週復帰）` : "");
+    (p.injury ? ` ・ ${esc(p.injury.kind)}（第${p.readyWeek}週復帰）` : "") +
+    (p.recovery?.pregnancy ? ` ・ 妊娠療養（第${p.recovery.pregnancy}週復帰）` : "");
 }
 function assignmentHint(p) {
   const owner = teams().find(team => team.party.includes(p.id));
   if (owner?.phase === "explore") return " ・ "+teamName(owner)+"が遠征中";
   if (p.leaveWeek === state.week) return " ・ 今週は休暇";
-  if (!g.available(state,p)) return " ・ 第"+p.readyWeek+"週に復帰";
+  if (!g.available(state,p)) return " ・ 第"+g.fitWeek(p)+"週に復帰";
   return owner && owner !== selected() ? " ・ "+teamName(owner)+"から移籍" : "";
 }
 const waitingLetters = () => teams().filter(team => team.phase === "explore" && team.trip.pending);
@@ -4745,7 +4906,7 @@ function mailbox() {
     ${promotions.map(e => `<p><small>第${e.week}週</small>　${esc(e.message)}</p>`).join("")}</section>` : "";
   return pageTitle("GUILD MAIL","伝書箱","隊から届いた相談に返信できます。") +
     (pending.join("") || '<p class="fine">返信を待っている隊はありません。</p>') +
-    guildMail + raidBulletin() + morningLetters(false) +
+    teams().map(rescueNotice).join("") + guildMail + raidBulletin() + morningLetters(false) +
     (pending.length ? waitUntilNextWeek() : "") +
     (archive.length ? `<details class="rules"><summary>${archiveTitle}（${archive.length}件）</summary><ul>${archive.join("")}</ul></details>` : "");
 }
@@ -4760,7 +4921,7 @@ function pageTitle(english,name,desc) {
   return `<div class="page-title"><span class="small-kicker">${english}</span><h1>${name}</h1><p>${desc}</p></div>`;
 }
 function ageLabel(p) {
-  return g.species[p.species].name+" ・ "+p.age+"歳";
+  return g.species[p.species].name+" ・ "+p.age+"歳"+({female:" ・ 女性",male:" ・ 男性"}[p.sex] || "");
 }
 function ageDetails(p) {
   const r = g.species[p.species];
@@ -4836,7 +4997,7 @@ function roster() {
     return `<article class="panel roster-card">${tag(status,visitor?"gold":resting?"rose":"mint")}${portrait(p)}
       <h2>${esc(g.formalName(p))}</h2><p>${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p><p>${ageLabel(p)}</p><p>階級　${esc(g.rankName(state,p))}</p>
       <div class="character-stats"><span>HP <b>${g.outfittedStat(state,p,"hp")}</b></span><span>攻 <b>${g.outfittedStat(state,p,"atk")}</b></span><span>防 <b>${g.outfittedStat(state,p,"def")}</b></span><span>速 <b>${g.outfittedStat(state,p,"spd")}</b></span></div>
-      <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && p.readyWeek>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+p.readyWeek+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
+      <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && g.fitWeek(p)>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+g.fitWeek(p)+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
       ${visitor ? "" : `<p class="fine">現在HP ${owner?.phase === "explore" ? unit.hp : g.currentHP(state,p)}/${g.outfittedStat(state,p,"hp")} ・ MP ${unit?.mp ?? g.currentMP(p)}/${g.maxMP(p)}<br>${moraleText(p)} ・ ${lifeStatus(p)}</p>`}
       ${p.backstory ? `<p class="backstory-excerpt">${esc(p.backstory)}</p>` : ""}
       ${visitor ? "" : action("character","人物詳細・育成","primary wide",`data-id="${p.id}" aria-label="${esc(p.name)}の人物詳細・育成"`)}
@@ -4900,11 +5061,17 @@ function debuffCare(p) {
     const symptom = g.debuffs[kind];
     if (!symptom) return "";
     const away = g.awayMember(state,p.id);
-    const cure = state.town.landmark === "cathedral" ? action("cure-debuff","大聖堂で完治 ・ "+g.cureCost+" G","btn",
-      `data-id="${kind}" ${away || g.guildGold(state)<g.cureCost ? "disabled" : ""}`) : "大聖堂で完治できます。";
-    const limb = symptom.limb ? action("fit-limb",symptom.limb+"（補正＋"+g.prosthesisBonus(state)+"％） ・ "+g.limbCost+" G","btn",
+    const treated = p.treatment?.[kind];
+    const service = kind === "pregnancy" ? "療養を発症から4週に短縮" : kind === "breakdown" ? "4週間の治療を開始" : "大聖堂で完治";
+    const guidance = kind === "pregnancy" ? "大聖堂で療養を発症から4週に短縮できます。" :
+      kind === "breakdown" ? "大聖堂で4週間の治療を受けられます。" : "大聖堂で完治できます。";
+    const cure = treated ? "大聖堂で治療中" : state.town.landmark === "cathedral" ? action("cure-debuff",service+" ・ "+g.cureCost+" G","btn",
+      `data-id="${kind}" ${away || g.guildGold(state)<g.cureCost ? "disabled" : ""}`) : guidance;
+    const limb = symptom.limb ? action("fit-limb","からくり工房の"+symptom.limb+" ⭐"+g.prosthesisQuality(state)+"（補正＋"+g.prosthesisBonus(state)+"％） ・ "+g.limbCost+" G","btn",
       `data-id="${kind}" ${away || bonus>=g.prosthesisBonus(state) || g.guildGold(state)<g.limbCost || state.town.repairs.hall || state.town.smithReadyWeek>state.week ? "disabled" : ""}`) : "";
-    return `<div><b>${symptom.name}</b> ・ ${symptom.axes.map(key=>axes[key]).join("・")}が基礎値の${50+bonus}％<div class="actions">${limb}${cure}</div></div>`;
+    const effect = symptom.axes.length ? symptom.axes.map(key=>axes[key]).join("・")+"が基礎値の"+(50+bonus)+"％" : "戦闘不可";
+    const recovery = p.recovery?.[kind] ? " ・ 第"+p.recovery[kind]+"週に回復" : "";
+    return `<div><b>${symptom.name}</b> ・ ${effect}${recovery}<div class="actions">${limb}${cure}</div></div>`;
   }).join("");
 }
 function characterProgress(p) {
@@ -5135,6 +5302,8 @@ function shopPanel() {
     <section class="shop-training"><div><b>工房の技術継承 ・ ${shop.lineage.generation}代目</b>
     <p>${g.species[shop.lineage.species].name} ・ 職人 ${shop.lineage.age}歳 ／ 見習い ${shop.lineage.apprenticeAge}歳（修業${shop.lineage.apprenticeYears}年・実習${shop.lineage.lessons}/6）</p>
     <small>営業4年ごとに加工品の品質と主効果＋1（上限＋8、現在＋${g.craftBonus(shop)}）。見習いは4年で継承の準備が整います。納品・加工で実習が6に達すると3年に短縮されます。代替わり後も店の技・品質を受け継ぎます。</small></div></section>
+    ${activeShop === "hall" ? `<section class="shop-training"><div><b>からくり工房</b><p>義肢の品質 ⭐${g.prosthesisQuality(state)} ・ 補正＋${g.prosthesisBonus(state)}％ ・ ${g.limbCost} G</p><small>職人の腕と品質で補正は最大＋80％。帰還後に人物手帳から注文できます。</small>
+      <div class="actions">${state.roster.filter(p=>Object.keys(p.debuffs).some(k=>g.debuffs[k]?.limb) && !g.awayMember(state,p.id)).map(p=>action("character",esc(p.name)+"の義肢を選ぶ","btn",`data-id="${p.id}"`)).join("")}</div></div></section>` : ""}
     ${buyerPicker()}<section class="shop-training"><div><b>${max?"親方の腕前":"店の経験 "+shop.xp+" / "+(3*shop.level)+" EXP"}</b>
     <small>${max?"最高品質で加工できます。":"納品で1 EXP、加工で2 EXP。店の成長で品質が上がります。"}</small></div>
     ${!max ? action("deliver",materialName(type)+"を1個納品（在庫 "+shopStock(type)+"）","btn",buyer()?.phase !== "explore" && shopStock(type)>0?"":"disabled") : ""}</section>
@@ -5383,7 +5552,8 @@ function scheduleStep() {
       clearTimeout(old?.timer); clocks.delete(team); continue;
     }
     const stage = clockStage(t);
-    const running = !state.clock.paused && !document.hidden && !emergency && !t.paused && !t.pending;
+    const waitingForRescue = t.rescue?.dispatched === false && t.rescue.elapsed > g.rescueGrace;
+    const running = !waitingForRescue && !state.clock.paused && !document.hidden && !emergency && !t.paused && !t.pending;
     const speed = stepSpeed(team);
     if (old && old.trip === t && old.stage === stage && old.speed === speed && Boolean(old.timer) === running) continue;
     const previous = old?.trip === t && old.stage === stage ? stepFraction(team) : old ? 0 : t.progress || 0;
@@ -5490,8 +5660,19 @@ function combatReadout(t) {
   return `<div class="battle-readout"><b>${f ? "戦闘中" : "戦闘終了"}${enemies ? "　"+enemies : ""}</b>
     ${events.map(e => `<span>${esc(e.message)}</span>`).join("")}</div>`;
 }
+function rescueStatus(t) {
+  return t.rescue.dispatched === false ? "救助隊の派遣待ち" : "救助隊が捜索中";
+}
+function rescueNotice(team) {
+  const t = team.trip, search = t?.rescue;
+  if (team.phase !== "explore" || !search || !t.unit.some(u=>u.state === "captured")) return "";
+  const left = Math.max(0,g.rescueGrace-search.elapsed);
+  const travel = Math.max(1,(state.town.landmark === "castle" ? 1 : 3)-(search.travel || 0));
+  return `<section class="raid-bulletin"><b>${teamBadge(team)} ・ ${rescueStatus(t)}</b><p>${t.unit.filter(u=>u.state === "captured").map(u=>esc(who(u.id).name)).join("・")}が捕縛されています。救出の猶予は残り${left}手、到着まで${travel}手です。期限を過ぎると負傷や精神崩壊、妊娠、死亡の恐れがあります。</p>
+    ${search.dispatched ? "" : action("dispatch-rescue","救助隊を派遣","primary",`data-party="${g.partyNumber(state,team)}"`)}</section>`;
+}
 function sceneLocation(t) {
-  const status = t.rescue ? "救助隊が捜索中" : t.pending ? "返信待ち" : t.paused || state.clock.paused ? "一時停止" : `${t.steps} 歩`;
+  const status = t.rescue ? rescueStatus(t) : t.pending ? "返信待ち" : t.paused || state.clock.paused ? "一時停止" : `${t.steps} 歩`;
   return `${g.tripRooms(t)[t.node].name} ・ ${status}`;
 }
 function explore() {
@@ -5518,7 +5699,7 @@ function report(r, live) {
     ${r.log.filter(e => e.relic).map(e => `<p><b>一点物の発見</b>　${esc(e.message)}</p>`).join("")}
     <div class="ledger"><div>今回の余剰<b>薬草 ×${r.surplus.herb} ・ 鉱石 ×${r.surplus.ore}</b></div><div>研究に卸した鉱石<b>${r.donated}個</b></div></div></section>
     <section class="panel padded">${title("chart","ギルドの指標")}<div class="report-metrics">${labels.map((name,i)=>`<div><b>${name}</b><span>${r.before[i]} → ${r.after[i]}</span>${tag(signed(r.after[i]-r.before[i]),r.after[i]<r.before[i]?"rose":"mint")}<small>${reasons[i]}</small></div>`).join("")}</div></section></div>
-    <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
+    <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.recoveryWeek?"第"+u.recoveryWeek+"週以降に復帰":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
     <details class="rules"><summary>判断と結果の記録</summary>${logs(r.log)}</details></section>${live?stockPanel():""}</div>
     ${live && waitingLetters().length ? `<div class="close-day">${waitUntilNextWeek()}</div>` : live?`<div class="close-day"><p>${g.anyAway(state)?"遠征中の隊がすべて帰還すると、週を締められます。":state.unlocked?"翌週へ向けて、仲間を休ませましょう。":"トトがマルタに帰還を知らせました。来週、新しい注文が届きます。"}</p>${action("next",icon("sun",17)+" 週を締めて翌週へ","primary",g.anyAway(state)?'disabled title="全隊の帰還を待ってください"':"")}</div>`:""}</div>`;
 }
@@ -5781,6 +5962,7 @@ function createForm() {
     <div class="form-pair"><label>種族<select name="species" id="creator-species">${options(g.species)}</select></label>
     <label>年齢（歳）<input name="age" id="creator-age" type="number" step="1" min="${g.species.human.adult}" max="${g.species.human.lifespan-1}" value="${g.species.human.adult}" required></label></div>
     <small id="creator-aging">${creationAgeHint("human")}</small>
+    <label>性別<select name="sex">${options({unspecified:"未指定",female:"女性",male:"男性"})}</select></label>
     <label>初期スキル<select name="initialSkill" id="initial-skill">${initialSkillOptions(g.startingJobs[0])}</select></label>
     <label>過去・生い立ち（任意）<textarea name="backstory" rows="3" placeholder="ギルドを訪れた理由など"></textarea></label>
     <div class="form-pair"><label>一人称<input name="pronoun" value="私" maxlength="12"></label><label>マスターの呼び方<input name="master" value="マスター" maxlength="16"></label></div>
@@ -5969,6 +6151,7 @@ document.addEventListener("click",event=>{
         g.startRepair(state,id);
         if (modal==="plot") drawModal();
         toast("修理を発注しました。"); break;
+      case "dispatch-rescue": g.dispatchRescue(state,teams()[Number(button.dataset.party)-1]); break;
       case "return": g.returnHome(state,selected()); break;
       case "reply": {
         const team = button.dataset.party ? teams()[Number(button.dataset.party) - 1] : selected();

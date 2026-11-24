@@ -13,7 +13,7 @@ try {
 let page = demo ? "hall" : "town", modal = "", draft = null, customImage = "", imageBusy = false, imageTicket = 0;
 const panes = { town: ["home","町の風景"], hall: ["scroll","ギルドホール"], roster: ["team","冒険者名簿"], shops: ["hammer","町のショップ"], mail: ["mail","伝書箱"], history: ["book","帰還記録"] };
 const labels = ["実力","信用","生存率","満足度"];
-const names = { ok: "無事", down: "戦闘不能", severe: "重傷", lost:"消失", missing:"行方不明" };
+const names = { ok: "無事", down: "戦闘不能", severe: "重傷", lost:"消失", missing:"行方不明", captured:"捕縛", resting:"療養中" };
 const money = n => `${n.toLocaleString("ja-JP")} <small>G</small>`;
 const signed = n => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
 const g = Guild;
@@ -140,7 +140,7 @@ function partyBoard(inHall) {
   const cards = teams().map((team, index) => {
     const status = team.leaveWeek === state.week ? "休暇中" : team.phase === "prep" ? "出発前" : team.phase === "report" ? "帰還済み" :
       team.trip.pending?.type === "crisis" ? "緊急通信" : team.trip.pending ? "伝書・返信待ち" :
-      team.trip.paused ? "一時停止" : "遠征中";
+      team.trip.rescue ? rescueStatus(team.trip) : team.trip.paused ? "一時停止" : "遠征中";
     return action("party", `<strong>${teamBadge(team)}</strong><span>${status} ・ ${team.wallet} G</span><small>${team.party.map(id => esc(who(id).name)).join("・") || "未編成"}</small>`,
       "team-card", `data-id="${index+1}" aria-pressed="${inHall && team === selected()}"`);
   }).join("");
@@ -148,7 +148,7 @@ function partyBoard(inHall) {
   const unlock = inHall && teams().length < g.maxParties ? action("unlock-party",
     `第${teams().length+1}隊を開設 ・ ${price} G`, "btn", g.guildGold(state) < price ? "disabled" : "") : "";
   const settings = inHall ? action("party-settings", icon("edit",15)+" 選択中の隊の設定", "btn") : "";
-  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征パーティー":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
+  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征パーティー":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
 }
 function morningControls() {
   const team = selected(), resting = team.leaveWeek === state.week;
@@ -171,13 +171,14 @@ function morningLetters(thisWeekOnly) {
 }
 function lifeStatus(p) {
   return `死亡 ${p.deaths}/${g.deathThreshold(state)}回` + (p.deaths >= g.deathThreshold(state)-1 ? "（次は永久消失）" : "") +
-    (p.injury ? ` ・ ${esc(p.injury.kind)}（第${p.readyWeek}週復帰）` : "");
+    (p.injury ? ` ・ ${esc(p.injury.kind)}（第${p.readyWeek}週復帰）` : "") +
+    (p.recovery?.pregnancy ? ` ・ 妊娠療養（第${p.recovery.pregnancy}週復帰）` : "");
 }
 function assignmentHint(p) {
   const owner = teams().find(team => team.party.includes(p.id));
   if (owner?.phase === "explore") return " ・ "+teamName(owner)+"が遠征中";
   if (p.leaveWeek === state.week) return " ・ 今週は休暇";
-  if (!g.available(state,p)) return " ・ 第"+p.readyWeek+"週に復帰";
+  if (!g.available(state,p)) return " ・ 第"+g.fitWeek(p)+"週に復帰";
   return owner && owner !== selected() ? " ・ "+teamName(owner)+"から移籍" : "";
 }
 const waitingLetters = () => teams().filter(team => team.phase === "explore" && team.trip.pending);
@@ -205,7 +206,7 @@ function mailbox() {
     ${promotions.map(e => `<p><small>第${e.week}週</small>　${esc(e.message)}</p>`).join("")}</section>` : "";
   return pageTitle("GUILD MAIL","伝書箱","隊から届いた相談に返信できます。") +
     (pending.join("") || '<p class="fine">返信を待っている隊はありません。</p>') +
-    guildMail + raidBulletin() + morningLetters(false) +
+    teams().map(rescueNotice).join("") + guildMail + raidBulletin() + morningLetters(false) +
     (pending.length ? waitUntilNextWeek() : "") +
     (archive.length ? `<details class="rules"><summary>${archiveTitle}（${archive.length}件）</summary><ul>${archive.join("")}</ul></details>` : "");
 }
@@ -220,7 +221,7 @@ function pageTitle(english,name,desc) {
   return `<div class="page-title"><span class="small-kicker">${english}</span><h1>${name}</h1><p>${desc}</p></div>`;
 }
 function ageLabel(p) {
-  return g.species[p.species].name+" ・ "+p.age+"歳";
+  return g.species[p.species].name+" ・ "+p.age+"歳"+({female:" ・ 女性",male:" ・ 男性"}[p.sex] || "");
 }
 function ageDetails(p) {
   const r = g.species[p.species];
@@ -296,7 +297,7 @@ function roster() {
     return `<article class="panel roster-card">${tag(status,visitor?"gold":resting?"rose":"mint")}${portrait(p)}
       <h2>${esc(g.formalName(p))}</h2><p>${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p><p>${ageLabel(p)}</p><p>階級　${esc(g.rankName(state,p))}</p>
       <div class="character-stats"><span>HP <b>${g.outfittedStat(state,p,"hp")}</b></span><span>攻 <b>${g.outfittedStat(state,p,"atk")}</b></span><span>防 <b>${g.outfittedStat(state,p,"def")}</b></span><span>速 <b>${g.outfittedStat(state,p,"spd")}</b></span></div>
-      <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && p.readyWeek>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+p.readyWeek+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
+      <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && g.fitWeek(p)>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+g.fitWeek(p)+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
       ${visitor ? "" : `<p class="fine">現在HP ${owner?.phase === "explore" ? unit.hp : g.currentHP(state,p)}/${g.outfittedStat(state,p,"hp")} ・ MP ${unit?.mp ?? g.currentMP(p)}/${g.maxMP(p)}<br>${moraleText(p)} ・ ${lifeStatus(p)}</p>`}
       ${p.backstory ? `<p class="backstory-excerpt">${esc(p.backstory)}</p>` : ""}
       ${visitor ? "" : action("character","人物詳細・育成","primary wide",`data-id="${p.id}" aria-label="${esc(p.name)}の人物詳細・育成"`)}
@@ -360,11 +361,17 @@ function debuffCare(p) {
     const symptom = g.debuffs[kind];
     if (!symptom) return "";
     const away = g.awayMember(state,p.id);
-    const cure = state.town.landmark === "cathedral" ? action("cure-debuff","大聖堂で完治 ・ "+g.cureCost+" G","btn",
-      `data-id="${kind}" ${away || g.guildGold(state)<g.cureCost ? "disabled" : ""}`) : "大聖堂で完治できます。";
-    const limb = symptom.limb ? action("fit-limb",symptom.limb+"（補正＋"+g.prosthesisBonus(state)+"％） ・ "+g.limbCost+" G","btn",
+    const treated = p.treatment?.[kind];
+    const service = kind === "pregnancy" ? "療養を発症から4週に短縮" : kind === "breakdown" ? "4週間の治療を開始" : "大聖堂で完治";
+    const guidance = kind === "pregnancy" ? "大聖堂で療養を発症から4週に短縮できます。" :
+      kind === "breakdown" ? "大聖堂で4週間の治療を受けられます。" : "大聖堂で完治できます。";
+    const cure = treated ? "大聖堂で治療中" : state.town.landmark === "cathedral" ? action("cure-debuff",service+" ・ "+g.cureCost+" G","btn",
+      `data-id="${kind}" ${away || g.guildGold(state)<g.cureCost ? "disabled" : ""}`) : guidance;
+    const limb = symptom.limb ? action("fit-limb","からくり工房の"+symptom.limb+" ⭐"+g.prosthesisQuality(state)+"（補正＋"+g.prosthesisBonus(state)+"％） ・ "+g.limbCost+" G","btn",
       `data-id="${kind}" ${away || bonus>=g.prosthesisBonus(state) || g.guildGold(state)<g.limbCost || state.town.repairs.hall || state.town.smithReadyWeek>state.week ? "disabled" : ""}`) : "";
-    return `<div><b>${symptom.name}</b> ・ ${symptom.axes.map(key=>axes[key]).join("・")}が基礎値の${50+bonus}％<div class="actions">${limb}${cure}</div></div>`;
+    const effect = symptom.axes.length ? symptom.axes.map(key=>axes[key]).join("・")+"が基礎値の"+(50+bonus)+"％" : "戦闘不可";
+    const recovery = p.recovery?.[kind] ? " ・ 第"+p.recovery[kind]+"週に回復" : "";
+    return `<div><b>${symptom.name}</b> ・ ${effect}${recovery}<div class="actions">${limb}${cure}</div></div>`;
   }).join("");
 }
 function characterProgress(p) {
@@ -595,6 +602,8 @@ function shopPanel() {
     <section class="shop-training"><div><b>工房の技術継承 ・ ${shop.lineage.generation}代目</b>
     <p>${g.species[shop.lineage.species].name} ・ 職人 ${shop.lineage.age}歳 ／ 見習い ${shop.lineage.apprenticeAge}歳（修業${shop.lineage.apprenticeYears}年・実習${shop.lineage.lessons}/6）</p>
     <small>営業4年ごとに加工品の品質と主効果＋1（上限＋8、現在＋${g.craftBonus(shop)}）。見習いは4年で継承の準備が整います。納品・加工で実習が6に達すると3年に短縮されます。代替わり後も店の技・品質を受け継ぎます。</small></div></section>
+    ${activeShop === "hall" ? `<section class="shop-training"><div><b>からくり工房</b><p>義肢の品質 ⭐${g.prosthesisQuality(state)} ・ 補正＋${g.prosthesisBonus(state)}％ ・ ${g.limbCost} G</p><small>職人の腕と品質で補正は最大＋80％。帰還後に人物手帳から注文できます。</small>
+      <div class="actions">${state.roster.filter(p=>Object.keys(p.debuffs).some(k=>g.debuffs[k]?.limb) && !g.awayMember(state,p.id)).map(p=>action("character",esc(p.name)+"の義肢を選ぶ","btn",`data-id="${p.id}"`)).join("")}</div></div></section>` : ""}
     ${buyerPicker()}<section class="shop-training"><div><b>${max?"親方の腕前":"店の経験 "+shop.xp+" / "+(3*shop.level)+" EXP"}</b>
     <small>${max?"最高品質で加工できます。":"納品で1 EXP、加工で2 EXP。店の成長で品質が上がります。"}</small></div>
     ${!max ? action("deliver",materialName(type)+"を1個納品（在庫 "+shopStock(type)+"）","btn",buyer()?.phase !== "explore" && shopStock(type)>0?"":"disabled") : ""}</section>
@@ -843,7 +852,8 @@ function scheduleStep() {
       clearTimeout(old?.timer); clocks.delete(team); continue;
     }
     const stage = clockStage(t);
-    const running = !state.clock.paused && !document.hidden && !emergency && !t.paused && !t.pending;
+    const waitingForRescue = t.rescue?.dispatched === false && t.rescue.elapsed > g.rescueGrace;
+    const running = !waitingForRescue && !state.clock.paused && !document.hidden && !emergency && !t.paused && !t.pending;
     const speed = stepSpeed(team);
     if (old && old.trip === t && old.stage === stage && old.speed === speed && Boolean(old.timer) === running) continue;
     const previous = old?.trip === t && old.stage === stage ? stepFraction(team) : old ? 0 : t.progress || 0;
@@ -950,8 +960,19 @@ function combatReadout(t) {
   return `<div class="battle-readout"><b>${f ? "戦闘中" : "戦闘終了"}${enemies ? "　"+enemies : ""}</b>
     ${events.map(e => `<span>${esc(e.message)}</span>`).join("")}</div>`;
 }
+function rescueStatus(t) {
+  return t.rescue.dispatched === false ? "救助隊の派遣待ち" : "救助隊が捜索中";
+}
+function rescueNotice(team) {
+  const t = team.trip, search = t?.rescue;
+  if (team.phase !== "explore" || !search || !t.unit.some(u=>u.state === "captured")) return "";
+  const left = Math.max(0,g.rescueGrace-search.elapsed);
+  const travel = Math.max(1,(state.town.landmark === "castle" ? 1 : 3)-(search.travel || 0));
+  return `<section class="raid-bulletin"><b>${teamBadge(team)} ・ ${rescueStatus(t)}</b><p>${t.unit.filter(u=>u.state === "captured").map(u=>esc(who(u.id).name)).join("・")}が捕縛されています。救出の猶予は残り${left}手、到着まで${travel}手です。期限を過ぎると負傷や精神崩壊、妊娠、死亡の恐れがあります。</p>
+    ${search.dispatched ? "" : action("dispatch-rescue","救助隊を派遣","primary",`data-party="${g.partyNumber(state,team)}"`)}</section>`;
+}
 function sceneLocation(t) {
-  const status = t.rescue ? "救助隊が捜索中" : t.pending ? "返信待ち" : t.paused || state.clock.paused ? "一時停止" : `${t.steps} 歩`;
+  const status = t.rescue ? rescueStatus(t) : t.pending ? "返信待ち" : t.paused || state.clock.paused ? "一時停止" : `${t.steps} 歩`;
   return `${g.tripRooms(t)[t.node].name} ・ ${status}`;
 }
 function explore() {
@@ -978,7 +999,7 @@ function report(r, live) {
     ${r.log.filter(e => e.relic).map(e => `<p><b>一点物の発見</b>　${esc(e.message)}</p>`).join("")}
     <div class="ledger"><div>今回の余剰<b>薬草 ×${r.surplus.herb} ・ 鉱石 ×${r.surplus.ore}</b></div><div>研究に卸した鉱石<b>${r.donated}個</b></div></div></section>
     <section class="panel padded">${title("chart","ギルドの指標")}<div class="report-metrics">${labels.map((name,i)=>`<div><b>${name}</b><span>${r.before[i]} → ${r.after[i]}</span>${tag(signed(r.after[i]-r.before[i]),r.after[i]<r.before[i]?"rose":"mint")}<small>${reasons[i]}</small></div>`).join("")}</div></section></div>
-    <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
+    <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.recoveryWeek?"第"+u.recoveryWeek+"週以降に復帰":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
     <details class="rules"><summary>判断と結果の記録</summary>${logs(r.log)}</details></section>${live?stockPanel():""}</div>
     ${live && waitingLetters().length ? `<div class="close-day">${waitUntilNextWeek()}</div>` : live?`<div class="close-day"><p>${g.anyAway(state)?"遠征中の隊がすべて帰還すると、週を締められます。":state.unlocked?"翌週へ向けて、仲間を休ませましょう。":"トトがマルタに帰還を知らせました。来週、新しい注文が届きます。"}</p>${action("next",icon("sun",17)+" 週を締めて翌週へ","primary",g.anyAway(state)?'disabled title="全隊の帰還を待ってください"':"")}</div>`:""}</div>`;
 }
@@ -1241,6 +1262,7 @@ function createForm() {
     <div class="form-pair"><label>種族<select name="species" id="creator-species">${options(g.species)}</select></label>
     <label>年齢（歳）<input name="age" id="creator-age" type="number" step="1" min="${g.species.human.adult}" max="${g.species.human.lifespan-1}" value="${g.species.human.adult}" required></label></div>
     <small id="creator-aging">${creationAgeHint("human")}</small>
+    <label>性別<select name="sex">${options({unspecified:"未指定",female:"女性",male:"男性"})}</select></label>
     <label>初期スキル<select name="initialSkill" id="initial-skill">${initialSkillOptions(g.startingJobs[0])}</select></label>
     <label>過去・生い立ち（任意）<textarea name="backstory" rows="3" placeholder="ギルドを訪れた理由など"></textarea></label>
     <div class="form-pair"><label>一人称<input name="pronoun" value="私" maxlength="12"></label><label>マスターの呼び方<input name="master" value="マスター" maxlength="16"></label></div>
@@ -1429,6 +1451,7 @@ document.addEventListener("click",event=>{
         g.startRepair(state,id);
         if (modal==="plot") drawModal();
         toast("修理を発注しました。"); break;
+      case "dispatch-rescue": g.dispatchRescue(state,teams()[Number(button.dataset.party)-1]); break;
       case "return": g.returnHome(state,selected()); break;
       case "reply": {
         const team = button.dataset.party ? teams()[Number(button.dataset.party) - 1] : selected();
