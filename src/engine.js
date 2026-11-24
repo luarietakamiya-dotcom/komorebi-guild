@@ -353,32 +353,31 @@ const Guild = (() => {
     medicine:"回復薬", ration:"保存食", tonic:"強壮食薬", spark:"火花玉"};
   const defaultSpecialty = {forge:"forge", shop:"armor", tavern:"kitchen"};
   const defaultTributeRate = 25, maxTributeRate = 50;
+  const partyWalletCap = 100;
   const validRate = rate => Number.isInteger(rate) && rate >= 0 && rate <= maxTributeRate;
   const supplyCounts = () => ({medicine:0, ration:0, tonic:0, spark:0});
   function restorePurse(team) {
     team.wallet ??= 0;
     team.bag ??= {};
-    team.bag.materials ??= {herb:0, ore:0};
+    // Legacy stock already includes every party’s share. Release the allocation once.
+    delete team.bag.materials;
     team.bag.supplies ??= supplyCounts();
     team.bag.lots ??= [];
   }
-  // gold and stock retain their consolidated save totals. The unassigned
-  // balance belongs to the guild, including all assets in pre-economy saves.
+  // Gold includes party wallets. All settled materials belong to the guild.
   const guildGold = s => s.gold - parties(s).reduce((sum,t) => sum + t.wallet,0);
   const balance = (s,team) => team ? team.wallet : guildGold(s);
-  function materialAvailable(s,key,team) {
-    if (team) return team.bag.materials[key] || 0;
+  function materialAvailable(s,key) {
     if (key === "food") return s.town.food;
-    return s.stock[key] - parties(s).reduce((sum,t) => sum + t.bag.materials[key],0);
+    return s.stock[key];
   }
   function spend(s,team,amount) {
     check(balance(s,team) >= amount, "支払い元の資金が足りません。");
     if (team) team.wallet -= amount;
     s.gold -= amount;
   }
-  function useMaterial(s,key,team,amount) {
-    check(materialAvailable(s,key,team) >= amount, "素材が足りません。");
-    if (team) team.bag.materials[key] -= amount;
+  function useMaterial(s,key,amount) {
+    check(materialAvailable(s,key) >= amount, "素材が足りません。");
     if (key === "food") s.town.food -= amount;
     else s.stock[key] -= amount;
   }
@@ -483,18 +482,19 @@ const Guild = (() => {
     }
     for (const shop of Object.values(s.town.workshops)) shop.lineage ??= workshopLineage(shop.type);
   }
+  const workshopClosed = (s,id) => s.town.repairs?.[id] || (id === "hall" && s.town.smithReadyWeek > s.week);
   function workshop(s, id) {
     check(Object.hasOwn(s.town.workshops, id), "営業中の店を選んでください。");
-    check(!s.town.repairs?.[id] && !(id==="hall" && s.town.smithReadyWeek>s.week),"この工房は復旧・療養中です。");
+    check(!workshopClosed(s,id),"この工房は復旧・療養中です。");
     return s.town.workshops[id];
   }
   function materialStock(s, type) {
     return type.material === "food" ? s.town : s.stock;
   }
-  function deliverMaterial(s, id, team = null) {
+  function deliverMaterial(s, id) {
     const shop = workshop(s, id), type = shopTypes[shop.type];
-    check(shop.level < shopRanks.length && team?.phase !== "explore", "納品する隊と店レベルを確認してください。");
-    useMaterial(s,type.material,team,1);
+    check(shop.level < shopRanks.length, "店レベルを確認してください。");
+    useMaterial(s,type.material,1);
     train(shop, 1);
   }
   function skillStatus(shop, node) {
@@ -553,9 +553,9 @@ const Guild = (() => {
     const shop = workshop(s, id), type = shopTypes[shop.type];
     const order = orderQuote(s, id, recipeId, finishId);
     check(!team || (partyNumber(s,team) && team.phase !== "explore"), "町にいる隊を選んでください。");
-    check(buyMaterials || materialAvailable(s,type.material,team) >= order.cost, "注文に使う素材が足りません。");
+    check(buyMaterials || materialAvailable(s,type.material) >= order.cost, "注文に使う素材が足りません。");
     spend(s,team,buyMaterials ? order.price : order.fee);
-    if (!buyMaterials) useMaterial(s,type.material,team,order.cost);
+    if (!buyMaterials) useMaterial(s,type.material,order.cost);
     if (type.slot) {
       if (order.effects.ward) s.town.ward = (s.town.ward || 0) + order.effects.ward;
       s.equipment.push({...order, owner:partyNumber(s,team), shopId:id, slot:type.slot, wearer:null});
@@ -577,6 +577,71 @@ const Guild = (() => {
       if (item.slot === "weapon" && s.wielder === id) s.wielder = null;
     }
     item.wearer = id || null;
+  }
+  function preferredSlot(job) {
+    if (["guard","knight","princess"].includes(job)) return "armor";
+    if (["healer","cleric","mage","sage","druid"].includes(job)) return "charm";
+    return "weapon";
+  }
+  // Compare personal combat bonuses (3 HP count as one point).
+  function gearValue(effects = {}) {
+    return (effects.atk || 0) + (effects.def || 0) + (effects.spd || 0) + (effects.hp || 0)/3;
+  }
+  function outfitOffers(s,team,budget) {
+    const offers = [];
+    for (const [index,item] of s.equipment.entries()) {
+      if (item.owner === partyNumber(s,team) && !item.wearer && item.shopId)
+        offers.push({index,slot:item.slot,value:gearValue(item.effects),price:0});
+    }
+    for (const [site,shop] of Object.entries(s.town.workshops)) {
+      const type = shopTypes[shop.type];
+      if (!type.slot || workshopClosed(s,site)) continue;
+      for (const recipe of type.recipes) {
+        if (recipeRequirement(shop,recipe)) continue;
+        for (const finish of ["plain",...shop.skills]) {
+          const order = orderQuote(s,site,recipe.id,finish);
+          if (order.price <= budget)
+            offers.push({site,recipe:recipe.id,finish,slot:type.slot,value:gearValue(order.effects),price:order.price});
+        }
+      }
+    }
+    return offers;
+  }
+  function shopForParty(s,team) {
+    const receipts = [];
+    if (team.phase === "explore" || team.wallet <= partyWalletCap) return receipts;
+    const members = team.party.map(id => person(s,id)).filter(p => p && !awayMember(s,p.id));
+    const policySlot = {safe:"armor",bold:"weapon",gather:"charm"}[team.policy];
+    // One upgrade per member per visit. Requote after each order as artisans gain experience.
+    while (members.length) {
+      const choices = [];
+      for (const offer of outfitOffers(s,team,team.wallet-partyWalletCap)) {
+        for (const member of members) {
+          const worn = s.equipment.find(item => item.wearer === member.id && item.slot === offer.slot);
+          let current = gearValue(worn?.effects);
+          if (offer.slot === "weapon" && s.wielder === member.id)
+            current = stat(member,"atk") * (bladeMultiplier(s.weaponQuality)-1);
+          if (offer.value <= current) continue;
+          const priority = Number(offer.slot === policySlot) + Number(offer.slot === preferredSlot(member.job));
+          choices.push({offer,member,current,priority});
+        }
+      }
+      const best = choices.sort((a,b) => b.priority-a.priority || a.current-b.current ||
+        b.offer.value-a.offer.value || a.offer.price-b.offer.price)[0];
+      if (!best) break;
+      const {offer,member} = best;
+      let index = offer.index;
+      if (index === undefined) {
+        placeOrder(s,offer.site,offer.recipe,offer.finish,team,true);
+        index = s.equipment.length-1;
+      }
+      wearOrder(s,index,member.id);
+      const item = s.equipment[index];
+      const source = offer.price ? shopTypes[s.town.workshops[offer.site].type].name+"に"+offer.price+" Gを支払い" : "隊の持ち物から";
+      receipts.push({price:offer.price,message:member.name+"が"+source+"「"+item.name+"」を装備しました。"});
+      members.splice(members.indexOf(member),1);
+    }
+    return receipts;
   }
   function outfittedStat(s, p, key) {
     const equipped = stat(p, key) + s.equipment.reduce((sum, item) => sum + (item.wearer === p.id ? item.effects[key] || 0 : 0), 0);
@@ -1685,7 +1750,7 @@ const Guild = (() => {
   };
   const allySelectors = s => ({self:"自分", lowest:"残HPが最も低い味方", leader:"リーダー",
     ...Object.fromEntries(s.roster.map(p => [p.id,p.name]))});
-  const subjects = s => ({...allySelectors(s), lowest:"味方の誰か", foe:"敵のいずれか"});
+  const subjects = (s,r) => ({...allySelectors(s), lowest:r?.hpOrder === "ratio" ? "かばえる味方の誰か" : "味方の誰か", foe:"敵のいずれか"});
   const enemySelectors = {nearest:"最も近い敵", strongest:"残HPが最も高い敵", casting:"詠唱中の敵",
     ...Object.fromEntries(Object.entries(foes).map(([id,e]) => [id,e.name]))};
   const actionList = p => ({...actions,...Object.fromEntries(p.skills.map(id => [id,abilities[id].name]))});
@@ -1702,15 +1767,22 @@ const Guild = (() => {
   function setGambits(s, id, rules) {
     const p = person(s,id);
     check(p && Array.isArray(rules) && rules.length <= gambitLimit, "戦術オーダーは1人10件までです。");
-    p.gambits = rules.map(({condition,subject="self",value=50,action,target}) => {
+    p.gambits = rules.map(({condition,subject="self",value=50,action,target,hpOrder}) => {
       check(Object.hasOwn(conditions,condition) && Object.hasOwn(subjects(s),subject) &&
         Object.hasOwn(actionList(p),action) && Object.hasOwn(targets(s,action,id),target), "条件・対象・習得技を確認してください。");
       check(Number.isInteger(value) && value >= 1 && value <= (condition === "count" ? 2 : 100), "条件の数値を確認してください。");
-      return {condition,subject,value,action,target};
+      const row = {condition,subject,value,action,target};
+      if (action === "cover" && target === "lowest" && hpOrder === "ratio") row.hpOrder = hpOrder;
+      return row;
     });
   }
   function preset(p, role) {
     const rule = (condition,action,target,value=50,subject="self") => ({condition,action,target,value,subject});
+    if (role === "tank") return [
+      {...rule("hp","cover","lowest",50,"lowest"),hpOrder:"ratio"},
+      rule("hp","cover","leader",75,"leader"),
+      rule("hp","heal","self",40)
+    ];
     const strike = p.skills.find(id => abilities[id].atk);
     const healing = p.skills.find(id => abilities[id].heal) || "heal";
     return role === "healer" ? [rule("status","cleanse","lowest",50,"lowest"),
@@ -1718,8 +1790,8 @@ const Guild = (() => {
       [...(strike ? [rule("always",strike,"strongest")] : []),rule("always","attack","nearest")];
   }
   function conditionLabel(s,r) {
-    if (r.condition === "hp") return subjects(s)[r.subject] + "のHPが" + r.value + "％以下";
-    if (r.condition === "status") return subjects(s)[r.subject] + "が動揺";
+    if (r.condition === "hp") return subjects(s,r)[r.subject] + "のHPが" + r.value + "％以下";
+    if (r.condition === "status") return subjects(s,r)[r.subject] + "が動揺";
     if (r.condition === "count") return "敵が" + r.value + "体以上";
     return conditions[r.condition];
   }
@@ -1777,11 +1849,15 @@ const Guild = (() => {
   function chooseGambit(s,t,u,round) {
     const p = person(s,u.id), f = t.fight;
     const allies = t.unit.filter(a => a.state === "ok"), enemies = f.enemies.filter(e => e.hp > 0);
-    const allyPool = key => key === "lowest" ? allies : allies.filter(a =>
+    const covered = Object.values(f.covers);
+    const coverable = allies.filter(a => a.id !== u.id && !covered.includes(a.id));
+    const allyPool = (key,candidates=allies) => key === "lowest" ? candidates : candidates.filter(a =>
       a.id === (key === "self" ? u.id : key === "leader" ? t.leader : key));
     const maxHP = a => a.kind ? foes[a.kind].hp : outfittedStat(s,person(s,a.id),"hp");
     for (const [i,r] of p.gambits.entries()) {
-      const pool = r.subject === "foe" ? enemies : allyPool(r.subject);
+      const byRatio = r.hpOrder === "ratio";
+      const candidates = byRatio && r.subject === "lowest" ? coverable : allies;
+      const pool = r.subject === "foe" ? enemies : allyPool(r.subject,candidates);
       if (r.condition === "hp" && !pool.some(a => 100*a.hp <= r.value*maxHP(a))) continue;
       if (r.condition === "status" && !pool.some(a => f.shaken[a.id])) continue;
       if (r.condition === "opening" && round !== 1) continue;
@@ -1797,15 +1873,14 @@ const Guild = (() => {
           ["nearest","strongest"].includes(r.target) || e.kind === r.target);
         target = r.target === "strongest" ? pool.sort((a,b) => b.hp-a.hp)[0] : pool[0];
       } else {
-        const pool = allyPool(r.target).filter(a => {
-          if (r.action === "cover") return a.id !== u.id && !Object.values(f.covers).includes(a.id);
+        const pool = allyPool(r.target,r.action === "cover" ? coverable : allies).filter(a => {
           if (skill?.heal || ["heal","medicine"].includes(r.action)) return a.hp < maxHP(a);
           if (r.action === "cleanse") return f.shaken[a.id];
           if (skill?.def) return (f.guards[a.id] || 0) < skill.def;
           if (skill?.spd) return (f.haste[a.id] || 0) < skill.spd;
           return true;
         });
-        target = [...pool].sort((a,b) => a.hp-b.hp)[0];
+        target = pool.sort(byRatio ? (a,b) => a.hp/maxHP(a)-b.hp/maxHP(b) : (a,b) => a.hp-b.hp)[0];
       }
       if (target) return {action:r.action,target,rule:i+1,condition:conditionLabel(s,r)};
     }
@@ -2014,7 +2089,6 @@ const Guild = (() => {
     t.spark = t.tonic = false;
     if (!all) return;
     const owner = partyNumber(s,team);
-    for (const key of Object.keys(team.bag.materials)) useMaterial(s,key,team,team.bag.materials[key]);
     team.bag.supplies = supplyCounts();
     team.bag.lots = [];
     s.gold -= team.wallet;
@@ -2260,10 +2334,7 @@ const Guild = (() => {
     const success = s.week <= t.deadline && t.cargo[q.item] >= q.count;
     const delivered = success ? q.count : 0, surplus = { ...t.cargo };
     surplus[q.item] -= delivered;
-    for (const key of Object.keys(items)) {
-      team.bag.materials[key] += surplus[key];
-      s.stock[key] += surplus[key];
-    }
+    for (const key of Object.keys(items)) s.stock[key] += surplus[key];
     const reward = success ? a.reward : 0, share = success ? a.share : 0;
     const tributeRate = a.tributeRate ?? s.tributeRate;
     const tribute = Math.floor(reward * tributeRate / 100), partyReward = reward-tribute;
@@ -2320,29 +2391,33 @@ const Guild = (() => {
       newPenalty ? Math.min(before[1]-newPenalty,credit) : credit, before[2] - 3*severe,
       before[3] + (success ? 2 : 0) - 2*wounded].map(n => Math.max(0, Math.min(100, n)));
     log(t, reason + "。" + (success ? items[q.item].name + delivered + "個を自動納品。" : "未達のため納品なし。"));
+    t.pending = null; t.fight = null; team.phase = "report";
+    const receipts = shopForParty(s,team);
+    const equipmentCost = receipts.reduce((sum,r) => sum + r.price,0);
+    for (const receipt of receipts) log(t,receipt.message,{outfit:true});
+    const walletSurplus = Math.max(0,team.wallet-partyWalletCap);
+    team.wallet -= walletSurplus;
     s.history.unshift({ ...tripResult(t.dungeon, t.path), partyNumber: partyNumber(s, team), week: s.week, quest: t.quest, leader: t.leader, success, delivered, surplus, xp, reason, before,
       after: [...s.metrics], wins: t.wins, severe, wounded, unit: t.unit.map(u => ({ ...u })), log: [...t.log],
-      actual: { reward, tributeRate, tribute, partyReward, share, wages: a.wages, food: a.food, medicine, net,
-        partyCosts:(t.partyPaid || 0)-partyRefund }, quote: a,
+      actual: { reward, tributeRate, tribute, partyReward, share, wages: a.wages, food: a.food, medicine, equipmentCost, net:net-equipmentCost,
+        partyCosts:(t.partyPaid || 0)-partyRefund, walletSurplus }, quote: a,
       sold: 0, donated: 0, returnedGold: guildGold(s), returnedWallet:team.wallet });
-    t.pending = null; t.fight = null; team.phase = "report";
     if (s.history[0].cleared) recordFeat(s,"clear",dungeons[t.dungeon].name+"を踏破");
     checkGuildPromotion(s);
   }
-  function sell(s, key, owner = s.bag.materials[key] ? s : null) {
-    check(owner?.phase !== "explore" && Object.hasOwn(items,key), "売れる余剰品がありません。");
-    useMaterial(s,key,owner,1);
+  function sell(s, key, reportTeam = null) {
+    check(Object.hasOwn(items,key), "売れる余剰品がありません。");
+    useMaterial(s,key,1);
     const price = salePrice(s,key);
     s.gold += price;
-    if (owner) owner.wallet += price;
-    if (owner?.phase === "report") reportFor(s,owner).sold += price;
+    if (reportTeam?.phase === "report") reportFor(s,reportTeam).sold += price;
   }
-  function donate(s, owner = s.bag.materials.ore ? s : null) {
-    check(owner?.phase !== "explore" && !s.research, "研究用の余剰鉱石が必要です。");
+  function donate(s, reportTeam = null) {
+    check(!s.research, "鉱石の研究は完了しています。");
     workshop(s,"hall");
-    useMaterial(s,"ore",owner,1);
+    useMaterial(s,"ore",1);
     s.research = s.week; train(s.town.workshops.hall, 1);
-    if (owner?.phase === "report") reportFor(s,owner).donated++;
+    if (reportTeam?.phase === "report") reportFor(s,reportTeam).donated++;
   }
   function buy(s, team = s, owner = null) {
     prep(team); check(s.research && !s.weapon, "研究完了と80Gが必要です。");
@@ -2730,9 +2805,13 @@ const Guild = (() => {
       s.party = s.roster.filter(p => available(s, p)).slice(0, 3).map(p => p.id);
       s.leader = s.party[0] || null;
     }
+    for (const team of parties(s)) {
+      for (const receipt of shopForParty(s,team))
+        s.morningMail.unshift({week:s.week,partyNumber:partyNumber(s,team),message:receipt.message});
+    }
     expireCalls(s);
   }
-  return { dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
+  return { partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,

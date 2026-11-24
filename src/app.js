@@ -413,19 +413,20 @@ function gambitEditor() {
   const rows = p.gambits.map((r,i) => {
     const hasSubject = ["hp","status"].includes(r.condition);
     const control = (cmd,label,disabled) => action("rule-"+cmd,label,"btn",`data-id="${i}" aria-label="${i+1}番を${label}" ${disabled ? "disabled" : ""}`);
-    const pool = g.subjects(state);
+    const pool = g.subjects(state,r);
     if (r.condition === "status") delete pool.foe;
     return `<li><div class="rule-head"><b>優先 ${i+1}</b><div class="actions">${control("up","上へ",!i)}${control("down","下へ",i === p.gambits.length-1)}${control("remove","削除")}</div></div>
       <div class="rule-fields">${select(i,"condition","条件",g.conditions,r.condition)}
       ${hasSubject ? select(i,"subject","誰が",pool,r.subject) : ""}
       ${r.condition === "hp" ? `<label>残HP（％以下）<input type="number" min="1" max="100" value="${r.value}" data-rule="${i}" data-field="value"></label>` : ""}
       ${r.condition === "count" ? select(i,"value","敵の数",{1:"1体以上",2:"2体以上"},r.value) : ""}
-      ${select(i,"action","行動",g.actionList(p),r.action)}${select(i,"target","誰に",g.targets(state,r.action,p.id),r.target)}</div>
+      ${select(i,"action","行動",g.actionList(p),r.action)}${select(i,"target","誰に",g.targets(state,r.action,p.id),r.target)}
+      ${r.action === "cover" && r.target === "lowest" ? select(i,"hpOrder","残HPの比べ方",{amount:"残りHPの実数",ratio:"最大HPに対する割合"},r.hpOrder || "amount") : ""}</div>
       ${r.action === "cover" ? "<small>次の自分の手番まで、選んだ仲間への攻撃を1回、自分の防御で引き受けます。</small>" : ""}</li>`;
   }).join("");
   return modalHead("flag",esc(p.name)+"の戦術オーダー") +
     `<div class="rule-intro"><p>上から順に調べ、最初に実行できる行動を選びます。該当しないときは従来の自動戦闘を行います。変更は次の手番から有効です。</p>${worldPauseButton()}</div>
-    <div class="rule-presets"><b>プリセットで置き換え</b>${action("rule-preset","回復役","btn",'data-id="healer"')}${action("rule-preset","攻撃役","btn",'data-id="attacker"')}</div>
+    <div class="rule-presets"><b>プリセットで置き換え</b>${action("rule-preset","回復役","btn",'data-id="healer"')}${action("rule-preset","攻撃役","btn",'data-id="attacker"')}${action("rule-preset","盾役","btn",'data-id="tank"')}</div>
     <ol class="gambit-list">${rows}</ol><div class="actions">${action("rule-add","＋ 条件を追加","primary",p.gambits.length >= g.gambitLimit ? "disabled" : "")}<small>${p.gambits.length} / ${g.gambitLimit} 件 ・ 自動保存</small></div>`;
 }
 function storeRules(rules,focus) {
@@ -496,26 +497,26 @@ function equipmentList(owner,site) {
   }).join("");
 }
 function partyInventory() {
-  const team = selected(), materials = team.bag.materials, t = team.phase === "explore" && team.trip;
+  const team = selected(), t = team.phase === "explore" && team.trip;
   return `<details class="rules" id="party-inventory"><summary>${teamName(team)}の持ち物・装備　${team.wallet} G</summary>
-    <p>薬草 ×${materials.herb} ・ 鉱石 ×${materials.ore}</p>
+    <p class="fine">帰還時と週初めに、財布に${g.partyWalletCap} Gを残せる範囲で装備を整えます。安全第一は防具、大胆なら武器、素材優先は魔法具を好みます。職業にも合う品を優先し、装備が手薄な仲間から選びます。</p>
     ${t ? `<p>今回の採集　薬草 ×${t.cargo.herb} ・ 鉱石 ×${t.cargo.ore} ／ 携行薬 ×${t.meds}
       ${t.meds ? "（次の1本 "+supplyEffect("medicine",t.packed?.medicine[0]?.quality || 1)+"）" : ""}</p>` : ""}
     ${supplyList(team.bag)}${equipmentList(team) || '<p class="fine">隊の装備品なし</p>'}
     ${state.weapon && state.weaponOwner === state.selectedParty ? bladeSelect() : ""}</details>`;
 }
-function stockPanel(owner = selected()) {
-  const stock = key => g.materialAvailable(state,key,owner);
-  return `<section class="panel padded">${title("bag",(owner ? teamName(owner) : "ギルド")+"の余剰素材")}
-    ${Object.entries(g.items).map(([key,it])=>`<div class="stock-row">${asset(key)}<div><b>${it.name} ×${stock(key)}</b><small>売値 ${g.salePrice(state,key)} G / 個</small></div>${action("sell","1個売る","btn",`data-id="${key}" ${stock(key)&&owner?.phase!=="explore"?"":"disabled"}`)}</div>`).join("")}
-    <div class="stock-choice">${action("donate",state.research?"鉱石研究は完了":"鉱石1個をトトに卸す","btn wide",!state.town.repairs.hall&&!(state.town.smithReadyWeek>state.week)&&stock("ore")&&!state.research&&owner?.phase!=="explore"?"":"disabled")}<small>研究完成後、準備中に武器を80Gで購入可</small></div></section>`;
+function stockPanel() {
+  const stock = key => g.materialAvailable(state,key);
+  return `<section class="panel padded">${title("bag","ギルド倉庫")}
+    ${Object.entries(g.items).map(([key,it])=>`<div class="stock-row">${asset(key)}<div><b>${it.name} ×${stock(key)}</b><small>売値 ${g.salePrice(state,key)} G / 個</small></div>${action("sell","1個売る","btn",`data-id="${key}" ${stock(key)?"":"disabled"}`)}</div>`).join("")}
+    <div class="stock-choice">${action("donate",state.research?"鉱石研究は完了":"鉱石1個をトトに卸す","btn wide",!state.town.repairs.hall&&!(state.town.smithReadyWeek>state.week)&&stock("ore")&&!state.research?"":"disabled")}<small>研究完成後、準備中に武器を80Gで購入可</small></div></section>`;
 }
 let activeShop = null, shopView = "orders", recipeId, finishId, buyerNumber = 0;
 const buyer = () => teams()[buyerNumber-1] || null;
 const shopSite = id => g.territoryPlots.find(p => p.id === id)?.name || "ギルド併設";
 const materialName = type => g.items[type.material]?.name || "畑の食料";
 const effectText = effects => Object.entries(effects).map(([key,value]) => g.effectNames[key] + signed(value)).join(" ／ ");
-const shopStock = type => g.materialAvailable(state,type.material,buyer());
+const shopStock = type => g.materialAvailable(state,type.material);
 function buyerPicker() {
   return `<label>支払い・受取先<select id="shop-buyer">${[null,...teams()].map((team,i) =>
     `<option value="${i}" ${i === buyerNumber ? "selected" : ""}>${team ? teamName(team) : "ギルド"}（${g.balance(state,team)} G${team?.phase === "explore" ? "・遠征中" : ""}）</option>`).join("")}</select></label>`;
@@ -530,7 +531,7 @@ function shops() {
       return action("open-shop", asset("scenery_"+type.building) +
         `<span><small>${shopSite(id)}</small><strong>${type.name}</strong>${g.artisanName(shop)} ・ ${g.shopRanks[shop.level-1]}</span>${tag(state.town.repairs[id] || (id==="hall" && state.town.smithReadyWeek>state.week) ? "休業中" : "Lv."+shop.level,"gold")}`,
         "shop-card", `data-id="${id}"`);
-    }).join("") + '</div><p class="fine">空き地に鍛冶屋・専門商店・酒場を建てると、店が増えます。同じ業種でも区画ごとに育ちます。</p>' + buyerPicker() + stockPanel(buyer());
+    }).join("") + '</div><p class="fine">空き地に鍛冶屋・専門商店・酒場を建てると、店が増えます。同じ業種でも区画ごとに育ちます。</p>' + stockPanel();
 }
 function shopTree(shop, type) {
   function nodeCard(node) {
@@ -555,7 +556,7 @@ function legacyBlade() {
   const quality = smith.level+smith.skills.length+g.craftBonus(smith)+g.craftSupport(state);
   return `<section class="panel padded">${title("hammer","トトの研究品")}<h3>木洩れ日の刃</h3>
     <p>余剰鉱石1個を研究に卸すと、木洩れ日の刃を80Gで購入できます。${!state.weapon ? stars(quality)+" 攻撃×"+g.bladeMultiplier(quality) : ""}</p>
-    ${!state.research ? action("donate","研究に鉱石1個を卸す","btn",g.materialAvailable(state,"ore",owner) && owner?.phase !== "explore" ? "" : "disabled") :
+    ${!state.research ? action("donate","研究に鉱石1個を卸す","btn",g.materialAvailable(state,"ore") ? "" : "disabled") :
       !state.weapon ? action("buy","木洩れ日の刃を購入 ・ 80 G","primary",team.phase === "prep" && g.balance(state,owner)>=80 ? "" : "disabled") :
       (state.weaponOwner || 0) === buyerNumber ? bladeSelect() : "購入済み"}</section>`;
 }
@@ -580,7 +581,7 @@ function shopOrders(shop, type) {
     <label>仕上げ<select id="shop-finish"><option value="plain">標準仕上げ</option>${type.skills.filter(n=>shop.skills.includes(n.id)).map(n=>
       `<option value="${n.id}" ${finishId===n.id?"selected":""}>${n.finish}</option>`).join("")}</select></label></div>
     <div class="ledger"><div>仕上がり ・ ${stars(quote.quality)}<b>${effectText(quote.effects)}</b></div>
-    ${powers ? `<p>${powers}</p>` : ""}<div>加工料<b>${quote.fee} G</b></div><div>加工に使う素材<b>${material} ×${quote.cost}（在庫 ${shopStock(type)}）</b></div></div>
+    ${powers ? `<p>${powers}</p>` : ""}<div>加工料<b>${quote.fee} G</b></div><div>ギルド倉庫から使う素材<b>${material} ×${quote.cost}（在庫 ${shopStock(type)}）</b></div></div>
     ${action("place-order",quote.name+"を注文","primary wide",owner?.phase !== "explore" && funds>=quote.fee && shopStock(type)>=quote.cost?"":"disabled")}
     ${action("purchase-order",`素材込みで購入 ・ ${quote.price} G`,"btn wide",owner?.phase !== "explore" && funds>=quote.price?"":"disabled")}</section>
     <section class="panel padded">${title("bag",type.slot?"仕立てた装備":"補給品")}${stock || '<p class="fine">注文した装備はここで冒険者に渡せます。</p>'}</section>
@@ -606,7 +607,7 @@ function shopPanel() {
       <div class="actions">${state.roster.filter(p=>Object.keys(p.debuffs).some(k=>g.debuffs[k]?.limb) && !g.awayMember(state,p.id)).map(p=>action("character",esc(p.name)+"の義肢を選ぶ","btn",`data-id="${p.id}"`)).join("")}</div></div></section>` : ""}
     ${buyerPicker()}<section class="shop-training"><div><b>${max?"親方の腕前":"店の経験 "+shop.xp+" / "+(3*shop.level)+" EXP"}</b>
     <small>${max?"最高品質で加工できます。":"納品で1 EXP、加工で2 EXP。店の成長で品質が上がります。"}</small></div>
-    ${!max ? action("deliver",materialName(type)+"を1個納品（在庫 "+shopStock(type)+"）","btn",buyer()?.phase !== "explore" && shopStock(type)>0?"":"disabled") : ""}</section>
+    ${!max ? action("deliver",materialName(type)+"を倉庫から1個納品（在庫 "+shopStock(type)+"）","btn",shopStock(type)>0?"":"disabled") : ""}</section>
     <div class="shop-tabs">${[["orders","注文・品揃え"],["tree","スキルツリー"]].map(([id,label])=>
       action("shop-view",label,"btn",`data-id="${id}" aria-pressed="${shopView===id}"`)).join("")}</div>
     ${shopView==="tree"? shopTree(shop,type) : shopOrders(shop,type)}</div>`;
@@ -618,7 +619,7 @@ function openShop(id) {
   recipeId = g.shopTypes[shop.type].recipes[0].id;
   finishId = "plain";
   shopView = "orders";
-  navigate("shops", true);
+  navigate("shops", {keepShop:true});
 }
 function journalPage() {
   return pageTitle("GUILD JOURNAL","帰還記録","遠征の判断と、仲間が持ち帰った成果の記録。")+
@@ -782,7 +783,7 @@ function sceneChatterRate(kind) {
   if (urgent()) return "off";
   return state.chatterRate;
 }
-let townScene, stopDungeon, previousDrawer;
+let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
   const people = townPeople();
   const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.jobs[p.job].face,name:g.familiarName(p),voice:p})));
@@ -806,7 +807,7 @@ function render() {
   $("#screen").innerHTML = (saveWarning?`<p role="status" class="warning">${esc(saveWarning)}</p>`:"")+
     townView(people)+`<section id="management" aria-label="${label}" ${page==="town"?"hidden":""}>
     <div class="drawer-bar">${icon(symbol,19)}<b>${label}</b>
-    ${action("nav",icon("close",18),"icon-btn",'data-id="town" aria-label="引き出しを閉じて町に戻る"')}</div>
+    ${action("close-drawer",icon("close",18),"icon-btn",'aria-label="引き出しを閉じて元の画面に戻る"')}</div>
     <div class="drawer-body">${drawer}</div></section>`;
   if (familyOpen && $("#family-panel")) $("#family-panel").open = true;
   if (featsOpen && $("#guild-feats")) $("#guild-feats").open = true;
@@ -829,8 +830,12 @@ function render() {
     }
   }
   const drawerKey = page === "shops" ? page + "/" + (activeShop || "") : page;
-  $("#management").scrollTop = previousDrawer === drawerKey ? drawerScroll : 0;
+  $("#management").scrollTop = restoringView?.drawerScroll ?? (previousDrawer === drawerKey ? drawerScroll : 0);
   previousDrawer = drawerKey;
+  if (restoringView) {
+    window.scrollTo(0, restoringView.windowScroll);
+    restoringView = null;
+  }
 }
 const stepSpeed = (team = selected()) => team.trip?.speed === 2 ? 2 : 1;
 const clocks = new Map();
@@ -867,7 +872,7 @@ function scheduleStep() {
     if (running) clock.timer = setTimeout(() => advanceExpedition(team), clock.delay);
   }
 }
-let interruptedModal = "";
+let interruptedModal = "", emergencyOrigin;
 function surfaceEmergency() {
   const team = urgent();
   if (!team) {
@@ -876,12 +881,18 @@ function surfaceEmergency() {
         modal = interruptedModal;
         interruptedModal = "";
         drawModal();
-      } else closeModal();
+      } else {
+        closeModal();
+        if (emergencyOrigin) restoreView(emergencyOrigin);
+        emergencyOrigin = null;
+      }
     }
     return;
   }
   if (modal !== "urgent") {
     interruptedModal = modal;
+    // A pending emergency on load opens directly on the party that sent it.
+    if (!modal && previousDrawer) emergencyOrigin = currentView();
     if (modal === "profile") profileDraft = readProfile($("#profile-editor"));
   }
   if (!interruptedModal) {
@@ -989,7 +1000,12 @@ function explore() {
     <div class="right-col">${partyPanel()}<section class="panel padded">${title("book","探索日誌")}<div id="trip-log">${logs([...t.log].reverse())}</div></section></div></div>`;
 }
 function ledger(r) {
-  const rows=[["reward","依頼報酬",1],...(r.actual.tribute === undefined ? [] : [["tribute",`ギルドへ上納（${r.actual.tributeRate}%）`,-1],["partyReward","上納後の隊の取り分",1]]),["share","仲間への分配",-1],["food","食料",-1],["medicine","使用した薬",-1],["wages","所属冒険者の給与",-1],["net","ギルド・隊の合計収支",1]];
+  const rows=[["reward","依頼報酬",1]];
+  if (r.actual.tribute !== undefined) rows.push(["tribute",`ギルドへ上納（${r.actual.tributeRate}%）`,-1],["partyReward","上納後の隊の取り分",1]);
+  rows.push(["share","仲間への分配",-1],["food","食料",-1],["medicine","使用した薬",-1],["wages","所属冒険者の給与",-1]);
+  if (r.actual.equipmentCost) rows.push(["equipmentCost","隊の装備購入",-1]);
+  if (r.actual.walletSurplus !== undefined) rows.push(["walletSurplus","余剰金をギルド金庫へ",1]);
+  rows.push(["net","ギルド・隊の合計収支",1]);
   return `<table class="accounts"><thead><tr><th>帳簿</th><th>見積</th><th>実額</th></tr></thead><tbody>${rows.map(([k,name,sign])=>`<tr><th>${name}</th><td>${r.quote[k] === undefined ? "—" : signed(sign*r.quote[k])}</td><td>${signed(sign*r.actual[k])} G</td></tr>`).join("")}</tbody></table>`;
 }
 function report(r, live) {
@@ -997,8 +1013,9 @@ function report(r, live) {
   return `<div class="report-wrap"><div class="section-title"><h2>${icon("flag",23)}第${r.week}週　${teamName(teams()[r.partyNumber - 1])}の帰還報告</h2>${tag(r.success?"依頼達成":"依頼未達",r.success?"mint":"rose")}</div>
     <div class="split"><section class="panel padded"><h3>${q.name}</h3><p>${esc(r.reason)}。${g.items[q.item].name}${r.delivered}個を納品。</p>${ledger(r)}
     <p class="fine">精算時のギルド金庫 ${r.returnedGold} G${r.returnedWallet === undefined ? "" : ` ／ 隊の残高 ${r.returnedWallet} G（今回の補給費負担 ${r.actual.partyCosts} G）`} ／ 帰還後の売却 ＋${r.sold} G</p>
+    ${r.log.filter(e => e.outfit).map(e => `<p><b>装備の支度</b>　${esc(e.message)}</p>`).join("")}
     ${r.log.filter(e => e.relic).map(e => `<p><b>一点物の発見</b>　${esc(e.message)}</p>`).join("")}
-    <div class="ledger"><div>今回の余剰<b>薬草 ×${r.surplus.herb} ・ 鉱石 ×${r.surplus.ore}</b></div><div>研究に卸した鉱石<b>${r.donated}個</b></div></div></section>
+    <div class="ledger"><div>${r.actual.equipmentCost === undefined ? "今回の余剰" : "ギルド倉庫へ移した素材"}<b>薬草 ×${r.surplus.herb} ・ 鉱石 ×${r.surplus.ore}</b></div><div>研究に卸した鉱石<b>${r.donated}個</b></div></div></section>
     <section class="panel padded">${title("chart","ギルドの指標")}<div class="report-metrics">${labels.map((name,i)=>`<div><b>${name}</b><span>${r.before[i]} → ${r.after[i]}</span>${tag(signed(r.after[i]-r.before[i]),r.after[i]<r.before[i]?"rose":"mint")}<small>${reasons[i]}</small></div>`).join("")}</div></section></div>
     <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.recoveryWeek?"第"+u.recoveryWeek+"週以降に復帰":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
     <details class="rules"><summary>判断と結果の記録</summary>${logs(r.log)}</details></section>${live?stockPanel():""}</div>
@@ -1116,7 +1133,6 @@ function selectPlot(id) {
   selectedPlot = id === "hill" ? GuildVoxelMaps.hillPlot : g.territoryPlots.find(plot => plot.id === id);
   if (selectedPlot && (!selectedPlot.road || townCamera)) {
     if (state.town.workshops[id]) return openShop(id);
-    if (page !== "town") navigate("town");
     $(`[data-action="plot"][data-id="${id}"]`).ariaExpanded = "true";
     showModal("plot");
   }
@@ -1224,7 +1240,7 @@ function drawModal() {
     `${ageDetails(who(characterId))}<p>引退すると遠征と育成を終え、町の住人になります。歩みは帰還記録に残ります。引退後の再入団はできません。</p><div class="actions">${action("retire","引退して町に残る","primary")}${action("character","人物手帳に戻る","btn",`data-id="${characterId}"`)}</div>`;
   if(modal==="gambits") body.innerHTML=gambitEditor();
   if(modal==="profile") body.innerHTML=profileForm();
-  if(modal==="help") body.innerHTML=modalHead("book","遊び方") + weekSpeedControl() + chatterControl() + `<ol class="help-list"><li><b>週の初めに仕事を選ぶ</b><p>リーダーが週初めの伝書で行き先を知らせ、標準で12秒の支度を終えると出発します。ホールで隊ごとの優先条件を選べます。手動で依頼や編成を決めたい週は、伝書の「今週の自動判断を止める」を押してください。</p></li><li><b>遠征パーティーを送り出す</b><p>出発準備で1〜3人とリーダーを選択。体調が悪いとリーダーは休暇を取り、プレイヤーもホールから休暇を指示できます。安全第一は戦闘を避け、素材優先では性格が分岐の決め方に影響します。</p></li><li><b>探索と通信を見守る</b><p>出発すると、仲間は約2秒に1歩進み、採集も戦闘も自分たちで行います。全員の動きと相談の期限を止めるには「全体を一時停止」を選びます。標準では、ゲームを表示している実時間4分で翌週になります。遠征パーティーの「戦術オーダー」から、手番で優先する条件・対象・行動を編集できます。隊だけを止めるには「隊を一時停止」、早く見届けるには速度を×2に。分岐の相談は伝書箱に届き、送信した隊が返事を待ちます。仲間が倒れたときは緊急通信が割り込み、全隊が待機します。通常・緊急ともに翌週が返信期限です。「返信せず翌週へ」で週を進めると、未返信の相談は各隊のリーダーが判断します。早めに切り上げたいときは「帰還する」を選びましょう。</p></li><li><b>成果を翌週へ</b><p>帰還時に自動納品・精算。余った品は売却や工房の研究に使えます。週を締めると翌週です。</p></li></ol>${combatNotes()}<p class="fine">探索の歩みと操作はそのつど保存されます。開き直すと、速度や一時停止、返信待ちも復元されます。</p>${action("close","手帳を閉じる","primary wide")}`;
+  if(modal==="help") body.innerHTML=modalHead("book","遊び方") + weekSpeedControl() + chatterControl() + `<ol class="help-list"><li><b>週の初めに仕事を選ぶ</b><p>リーダーが週初めの伝書で行き先を知らせ、標準で12秒の支度を終えると出発します。ホールで隊ごとの優先条件を選べます。手動で依頼や編成を決めたい週は、伝書の「今週の自動判断を止める」を押してください。</p></li><li><b>遠征パーティーを送り出す</b><p>出発準備で1〜3人とリーダーを選択。体調が悪いとリーダーは休暇を取り、プレイヤーもホールから休暇を指示できます。安全第一は戦闘を避け、素材優先では性格が分岐の決め方に影響します。</p></li><li><b>探索と通信を見守る</b><p>出発すると、仲間は約2秒に1歩進み、採集も戦闘も自分たちで行います。全員の動きと相談の期限を止めるには「全体を一時停止」を選びます。標準では、ゲームを表示している実時間4分で翌週になります。遠征パーティーの「戦術オーダー」から、手番で優先する条件・対象・行動を編集できます。隊だけを止めるには「隊を一時停止」、早く見届けるには速度を×2に。分岐の相談は伝書箱に届き、送信した隊が返事を待ちます。仲間が倒れたときは緊急通信が割り込み、全隊が待機します。通常・緊急ともに翌週が返信期限です。「返信せず翌週へ」で週を進めると、未返信の相談は各隊のリーダーが判断します。早めに切り上げたいときは「帰還する」を選びましょう。</p></li><li><b>成果を翌週へ</b><p>帰還時に自動納品・精算。余った素材はギルド倉庫に入り、売却や工房の研究に使えます。隊は運転資金を残して装備を購入し、残った余剰金をギルド金庫へ戻します。週を締めると翌週です。</p></li></ol>${combatNotes()}<p class="fine">探索の歩みと操作はそのつど保存されます。開き直すと、速度や一時停止、返信待ちも復元されます。</p>${action("close","手帳を閉じる","primary wide")}`;
   if(modal==="work") body.innerHTML=modalHead("sun","今週は休養する")+`<p>遠征を休み、町の手伝いをして翌週を迎えます。週給支給後の収入は＋30G。受注前なので信用は変わりません。</p><div class="actions">${action("do-work","町を手伝い、週を締める","primary")}${action("close","戻る","btn")}</div>`;
 }
 function prepForm() {
@@ -1305,12 +1321,39 @@ async function readFace(input) {
   finally { if(ticket===imageTicket){imageBusy=false;updatePreview();} }
 }
 function closeModal() { $("#dialog").close(); modal=""; }
-function navigate(id, keepShop = false) {
+let drawerHistory = [];
+function currentView() {
+  return {page, party:state.selectedParty, drawerScroll:$("#management")?.scrollTop || 0, windowScroll:window.scrollY || 0};
+}
+function restoreView(view) {
+  page = view?.page || "town";
+  if (view && teams()[view.party - 1]) state.selectedParty = view.party;
+  restoringView = view;
+}
+function changePage(id) {
+  if (id === "town") drawerHistory = [];
+  else if (id !== page) {
+    // Keep one return point per drawer when switching repeatedly between tabs.
+    drawerHistory = drawerHistory.filter(view => view.page !== id && view.page !== page);
+    drawerHistory.push(currentView());
+  }
+  page = id;
+}
+function closeDrawer() {
+  const closed = page, party = state.selectedParty;
+  restoreView(drawerHistory.pop());
+  render();
+  if (state.selectedParty !== party) save();
+  $(`#sidebar [data-id="${closed}"]`)?.focus({preventScroll:true});
+}
+function navigate(id, {keepShop = false, party} = {}) {
   if (id === "forge") return openShop("hall");
   if (id === "shops" && !keepShop) activeShop = null;
   if (modal==="plot" && $("#dialog").open) closeModal();
   const closed = id==="town" && page!=="town" ? page : null;
-  page=id; render(); window.scrollTo(0,0);
+  changePage(id);
+  if (party) state.selectedParty = party;
+  render(); window.scrollTo(0,0);
   if (closed) $(`#sidebar [data-id="${closed}"]`)?.focus();
   else if (page!=="town") $("#management .drawer-bar button")?.focus({preventScroll:true});
 }
@@ -1322,6 +1365,7 @@ document.addEventListener("click",event=>{
       case "town-mode": changeTownView(id==="stack"); return;
       case "town-turn": changeTownView(true,Number(id)); return;
       case "nav": navigate(id); return;
+      case "close-drawer": closeDrawer(); return;
       case "gambits": characterId = id; showModal("gambits"); return;
       case "rule-add": case "rule-remove": case "rule-up": case "rule-down": case "rule-preset":
         if (modal === "gambits") editRule(cmd,id);
@@ -1357,7 +1401,7 @@ document.addEventListener("click",event=>{
         break;
       case "enlist-child": g.enlistChild(state,id); toast("町で育った子が入団しました。"); break;
       case "retirement": showModal("retirement"); return;
-      case "retire": g.retire(state,characterId); closeModal(); page="roster"; break;
+      case "retire": g.retire(state,characterId); closeModal(); changePage("roster"); break;
       case "hold": g.holdDeparture(state,teams()[Number(button.dataset.party)-1]); break;
       case "vacation": g.takeLeave(state,selected()); break;
       case "allocate": g.allocate(state,characterId,id); break;
@@ -1370,7 +1414,7 @@ document.addEventListener("click",event=>{
         render();
         $(`[data-action="shop-view"][data-id="${id}"]`).focus({preventScroll:true});
         return;
-      case "deliver": g.deliverMaterial(state,activeShop,buyer()); toast("素材を納品しました。"); break;
+      case "deliver": g.deliverMaterial(state,activeShop); toast("素材を納品しました。"); break;
       case "learn-skill": g.learnSkill(state,activeShop,id); toast("新しい仕上げを習得しました。"); break;
       case "reset-skills":
         g.resetSkills(state,activeShop);
@@ -1384,10 +1428,10 @@ document.addEventListener("click",event=>{
       case "party": {
         const number = Number(id);
         if (!teams()[number - 1]) return;
-        state.selectedParty = number; save(); navigate("hall"); return;
+        navigate("hall", {party:number}); save(); return;
       }
       case "unlock-party":
-        state.selectedParty = g.unlockParty(state); page = "hall"; break;
+        state.selectedParty = g.unlockParty(state); changePage("hall"); break;
       case "guild-settings": case "party-settings": {
         profileSlot = cmd === "guild-settings" ? 0 : state.selectedParty;
         const profile = profileSlot ? selected().partyProfile : state.guildProfile;
@@ -1418,7 +1462,7 @@ document.addEventListener("click",event=>{
         g.treatDebuff(state,characterId,id,cmd==="fit-limb");
         break;
       case "build": {
-        if (modal !== "plot" || page !== "town" || !$("#dialog").open) return;
+        if (modal !== "plot" || !$("#dialog").open) return;
         g.build(state,selectedPlot.id,id,id==="shop" ? $("#build-specialty").value : undefined);
         const scroll = $(".town-scroll").scrollLeft;
         closeModal(); save(); render();
@@ -1439,7 +1483,7 @@ document.addEventListener("click",event=>{
         g.configure(state,draft.party,draft.leader,draft.policy,draft.meds,selected(),draft.dungeon);
         closeModal(); toast("編成と補給の計画を保存しました。"); break;
       case "depart":
-        g.depart(state,selected(),draft,true); closeModal(); page="hall"; window.scrollTo(0,0); break;
+        g.depart(state,selected(),draft,true); closeModal(); changePage("hall"); window.scrollTo(0,0); break;
       case "pause":
       case "speed":
         if (selected().phase !== "explore" || selected().trip.pending) return;
@@ -1458,14 +1502,14 @@ document.addEventListener("click",event=>{
         const team = button.dataset.party ? teams()[Number(button.dataset.party) - 1] : selected();
         g.reply(state,id,team); surfaceEmergency(); break;
       }
-      case "sell": g.sell(state,id,page === "shops" ? buyer() : selected()); toast(`${g.items[id].name}1個を${g.salePrice(state,id)}Gで売りました。`); break;
-      case "donate": g.donate(state,page === "shops" ? buyer() : selected()); toast("トトの研究が完了！ 次の出発準備で武器を買えます。"); break;
+      case "sell": g.sell(state,id,page === "shops" ? null : selected()); toast(`${g.items[id].name}1個を売却し、ギルド金庫に${g.salePrice(state,id)} Gが入りました。`); break;
+      case "donate": g.donate(state,page === "shops" ? null : selected()); toast("トトの研究が完了！ 次の出発準備で武器を買えます。"); break;
       case "buy": g.buy(state,buyer() || selected(),buyer()); toast("木洩れ日の刃を購入し、装備しました。"); break;
       case "next":
         g.nextWeek(state); lastWorldTick = performance.now();
-        if (!modal && page !== "mail") page = "town";
+        if (!modal && page !== "mail") changePage("town");
         surfaceEmergency(); window.scrollTo(0,0); break;
-      case "do-work": g.nextWeek(state,true); lastWorldTick = performance.now(); closeModal(); page="town";window.scrollTo(0,0);toast("町の手伝いを終え、30Gが残りました。");break;
+      case "do-work": g.nextWeek(state,true); lastWorldTick = performance.now(); closeModal(); changePage("town");window.scrollTo(0,0);toast("町の手伝いを終え、30Gが残りました。");break;
       default: return;
     }
     save(); render(); refreshCharacter(); scheduleStep();
@@ -1560,7 +1604,10 @@ document.addEventListener("change",event=>{
   drawModal(); (pick?$(`[data-pick="${pick}"]`):$("#"+focusId))?.focus();
 });
 document.addEventListener("keydown",event=>{
-  if (event.key==="Escape" && !$("#dialog").open && page!=="town") navigate("town");
+  if (event.key==="Escape" && !event.repeat && !$("#dialog").open && page!=="town") {
+    event.preventDefault();
+    closeDrawer();
+  }
 });
 document.addEventListener("input",e=>{
   const note = e.target.dataset?.note;

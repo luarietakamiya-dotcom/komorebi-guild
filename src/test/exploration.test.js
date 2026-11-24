@@ -16,8 +16,9 @@ function openGame(saved, world, media = {}) {
     if (!elements.has(selector)) elements.set(selector, { innerHTML: "", focus() {}, append() {}, querySelector() { return null; }, classList: { add() {}, remove() {} } });
     return elements.get(selector);
   }
+  const dialogEvents = {};
   Object.assign(element("#dialog"), {
-    setAttribute() {}, addEventListener() {},
+    setAttribute() {}, addEventListener(type, fn) { dialogEvents[type] = fn; },
     showModal() { this.open = true; }, close() { this.open = false; }
   });
   element("#creator").fields = {job:"sword",trait:"bold",tone:"polite"};
@@ -32,6 +33,21 @@ function openGame(saved, world, media = {}) {
   });
   return {
     click(action, id, party) { handlers.click({ target: { closest: () => ({ dataset: { action, id, party } }) } }); },
+    clickDrawerClose() {
+      const button = element("#screen").innerHTML.match(/<div class="drawer-bar">[\s\S]*?(<button[^>]*>)/)[1];
+      this.click(button.match(/data-action="([^"]+)"/)[1], button.match(/data-id="([^"]+)"/)?.[1]);
+    },
+    escape() {
+      let prevented = false;
+      const event = {key:"Escape", preventDefault() { prevented = true; }};
+      handlers.keydown(event);
+      const dialog = element("#dialog");
+      if (dialog.open && !prevented) {
+        dialogEvents.cancel(event);
+        if (!prevented) { dialog.close(); dialogEvents.close(); }
+      }
+    },
+    element,
     select(id, value) {
       const el = element("#"+id);
       Object.assign(el,{id,value,dataset:{}});
@@ -215,6 +231,76 @@ test("起動時は町がホームで、運営の引き出しを開閉しても�
     game.click("nav","town");
     assert.match(screen(), closed);
   }
+});
+
+test("第2隊の探索から伝書箱を開き、✕・Escで同じ隊の現在地と表示位置に戻る", () => {
+  const s = Guild.initial();
+  Guild.unlockParty(s);
+  Guild.depart(s, s.extraParties[0], {party:["gald"],leader:"gald",policy:"gather",meds:0});
+  const game = openGame(JSON.stringify(s));
+  game.click("party","2");
+  game.element("#management").scrollTop = 480;
+  game.click("nav","mail");
+  game.tick();
+  game.click("nav","mail");
+  game.clickDrawerClose();
+  const hall = game.html("#screen");
+  assert.match(hall, /id="management" aria-label="遠征を見守る"\s*>/);
+  assert.match(hall, /第2隊 ・ 苔むす森の洞/);
+  assert.equal(game.element("#management").scrollTop,480);
+  assert.equal(game.state().extraParties[0].trip.steps,1);
+
+  game.click("nav","roster");
+  game.click("help");
+  game.escape();
+  assert.equal(game.element("#dialog").open,false);
+  assert.match(game.html("#screen"), /id="management" aria-label="冒険者名簿"\s*>/);
+  game.escape();
+  assert.match(game.html("#screen"), /id="management" aria-label="遠征を見守る"\s*>/);
+  assert.match(game.html("#screen"), /第2隊 ・ 苔むす森の洞/);
+  game.click("plot","brook");
+  game.click("close");
+  assert.match(game.html("#screen"), /id="management" aria-label="遠征を見守る"\s*>/);
+});
+
+test("町からの伝書箱は町へ、商店からの帰還記録は開いていた商店へ戻る", () => {
+  const game = openGame();
+  const town = /<section id="management"[^>]* hidden>/;
+  game.click("nav","mail");
+  game.clickDrawerClose();
+  assert.match(game.html("#screen"), town);
+  game.click("nav","forge");
+  game.click("shop-view","tree");
+  game.click("nav","history");
+  game.escape();
+  assert.match(game.html("#screen"), /id="management" aria-label="町の鍛冶屋"\s*>/);
+  assert.match(game.html("#screen"), /data-id="tree" aria-pressed="true"/);
+  game.click("nav","mail");
+  game.click("nav","town");
+  game.click("nav","history");
+  game.escape();
+  assert.match(game.html("#screen"), town);
+});
+
+test("伝書箱に割り込んだ他隊の緊急通信に返信しても、元の隊への戻り先を保つ", () => {
+  const s = Guild.initial();
+  Guild.unlockParty(s);
+  Guild.depart(s, s, {party:["mina","popo"],leader:"mina",policy:"gather",meds:0});
+  Guild.step(s); Guild.step(s);
+  Guild.depart(s, s.extraParties[0], {party:["gald"],leader:"gald",policy:"gather",meds:0});
+  const game = openGame(JSON.stringify(s));
+  game.click("party","2");
+  game.click("nav","mail");
+  game.tickFirst();
+  assert.match(game.html("#dialog-body"), /第1隊から緊急通信/);
+  game.escape();
+  assert.equal(game.element("#dialog").open,true);
+  game.click("reply","return","1");
+  assert.match(game.html("#screen"), /id="management" aria-label="伝書箱"\s*>/);
+  assert.equal(game.state().selectedParty,2);
+  game.clickDrawerClose();
+  assert.match(game.html("#screen"), /id="management" aria-label="遠征を見守る"\s*>/);
+  assert.match(game.html("#screen"), /第2隊 ・ 苔むす森の洞/);
 });
 
 test("町から2隊を同時出発し、表示切替・一時停止・帰還・再読込が他隊の時計に干渉しない", () => {
@@ -658,6 +744,27 @@ test("町・遠征・戦闘の全体停止、途中再開、戦術オーダー�
   assert.equal(game.state().history.length,1);
 });
 
+test("戦術オーダー画面から盾役を適用し、HPの比較方法と優先順を編集・保存できる", () => {
+  const game = openGame();
+  game.click("nav","roster"); game.click("character","gald"); game.click("gambits","gald");
+  assert.match(game.html("#dialog-body"),/data-id="tank">盾役<\/button>/);
+  game.click("rule-preset","tank");
+  const rules = () => game.state().roster.find(p => p.id === "gald").gambits;
+  assert.deepEqual(rules(),Guild.preset(Guild.person(Guild.initial(),"gald"),"tank"));
+  assert.match(game.html("#dialog-body"),/value="ratio" selected>最大HPに対する割合/);
+  game.changeRule(0,"hpOrder","amount");
+  game.changeRule(0,"value","60");
+  game.click("rule-down","0");
+  const edited = rules();
+  assert.equal(edited[0].target,"leader");
+  assert.equal(edited[1].value,60);
+  assert.equal(edited[1].hpOrder,undefined);
+  const resumed = game.reload();
+  resumed.click("nav","roster"); resumed.click("character","gald"); resumed.click("gambits","gald");
+  assert.match(resumed.html("#dialog-body"),/value="amount" selected>残りHPの実数/);
+  assert.deepEqual(resumed.state().roster.find(p => p.id === "gald").gambits,edited);
+});
+
 test("戦術オーダーの画面でかばう条件と優先相手を選び、再読込後も戦闘に反映する", () => {
   let game = openGame();
   game.click("prepare");
@@ -858,7 +965,7 @@ test("ギルド設定の上納率を精算と帰還記録に残し、隊の財�
   game.click("nav","shops"); game.click("open-shop","hall");
   game.select("shop-buyer","1");
   game.click("place-order");
-  assert.deepEqual([game.state().wallet,game.state().bag.materials.ore],[38,0]);
+  assert.deepEqual([game.state().wallet,game.state().stock.ore],[38,0]);
   assert.equal(game.state().equipment[0].owner,1);
   assert.equal(Guild.guildGold(game.state()),Guild.guildGold(settled));
   game = game.reload();
@@ -866,6 +973,35 @@ test("ギルド設定の上納率を精算と帰還記録に残し、隊の財�
   assert.match(game.html("#screen"), /旅の小刀[\s\S]*⭐[\s\S]*攻撃\+2/);
   game.click("nav","history");
   assert.match(game.html("#screen"), /上納後の隊の取り分[\s\S]*100 G/);
+});
+
+test("帰還報告と履歴に金庫へ戻した余剰金を表示し、旧履歴も開ける", () => {
+  const s = Guild.initial();
+  s.wallet = 90;
+  const game = openGame(JSON.stringify(s));
+  game.click("prepare");
+  game.select("meds","0");
+  game.click("depart");
+  for (let i=0;i<4;i++) game.tick();
+  const transferRow = /余剰金をギルド金庫へ<\/th><td>—<\/td><td>\+24 G<\/td>/;
+  assert.match(game.html("#screen"),/ミナが鍛冶屋に26 Gを支払い「旅の小刀」を装備/);
+  assert.match(game.html("#screen"),/ギルド倉庫へ移した素材/);
+  assert.match(game.html("#screen"),transferRow);
+  const saved = game.state();
+  assert.equal(saved.wallet,100);
+  Guild.sell(saved,"herb");
+  const restored = openGame(JSON.stringify(saved));
+  restored.click("nav","history");
+  assert.equal(restored.state().wallet,100);
+  assert.match(restored.html("#screen"),/隊の装備購入[\s\S]*旅の小刀/);
+  assert.match(restored.html("#screen"),transferRow);
+
+  delete saved.history[0].actual.equipmentCost;
+  delete saved.history[0].actual.walletSurplus;
+  const legacy = openGame(JSON.stringify(saved));
+  legacy.click("nav","history");
+  assert.match(legacy.html("#screen"),/ギルド・隊の合計収支/);
+  assert.doesNotMatch(legacy.html("#screen"),/余剰金をギルド金庫へ|NaN/);
 });
 
 test("町とホールの施設一覧に実効値と休止状態、人物手帳に士気倍率を表示する", () => {

@@ -47,34 +47,64 @@ test("受注時の上納率を隊別に固定し、達成・未達の報酬、�
   G.depart(s,second);
   const failure = finish(s,second);
   assert.deepEqual([failure.actual.reward,failure.actual.tribute,second.wallet],[0,0,0]);
-  assert.equal(second.bag.materials.herb,4);
+  assert.deepEqual(s.stock,failure.surplus);
+  assert.equal(s.stock.herb,4);
+  assert.equal(second.bag.materials,undefined);
   const first = finish(s);
   assert.deepEqual([first.actual.reward,first.actual.tributeRate,first.actual.tribute,
     first.actual.partyReward,first.actual.share,s.wallet],[200,25,50,150,60,90]);
   assert.equal(G.guildGold(s),240-50-30-36+50);
-  assert.deepEqual(s.bag.materials,{herb:2,ore:1});
-  assert.equal(G.materialAvailable(s,"herb",null),0);
+  assert.deepEqual(first.surplus,{herb:2,ore:1});
+  assert.equal(s.bag.materials,undefined);
+  assert.equal(G.materialAvailable(s,"herb"),6);
+  const treasury = G.guildGold(s);
   G.sell(s,"herb",second);
-  assert.deepEqual([s.wallet,second.wallet,second.bag.materials.herb],[90,10,3]);
-  unchanged(s,() => G.sell(s,"herb",null));
+  assert.deepEqual([s.wallet,second.wallet,s.stock.herb,G.guildGold(s)],[90,0,5,treasury+10]);
+  assert.equal(s.stock.ore,2);
+  G.sell(s,"ore"); G.sell(s,"ore");
+  unchanged(s,() => G.sell(s,"ore"));
   unchanged(s,() => G.returnHome(s));
   assert.deepEqual(reload(s),s);
 });
 
-test("注文は購入者だけの資金・素材を使い、装備の交換・移籍で所有権を守る", () => {
+test("早期帰還でも薬代を返金した後に100Gを超えた分だけを帰還した隊から金庫へ戻す", () => {
+  for (const [startingWallet,remaining,surplus] of [[109,99,0],[110,100,0],[111,100,1]]) {
+    const s = G.initial();
+    s.gold = 600;
+    G.unlockParty(s);
+    const second = s.extraParties[0];
+    G.configure(s,["gald"],"gald","safe",1,second);
+    s.wallet = 150;
+    second.wallet = startingWallet;
+    const total = s.gold, treasury = G.guildGold(s);
+    G.depart(s,second);
+    G.returnHome(s,second);
+    const r = G.reportFor(s,second);
+    assert.equal(r.actual.walletSurplus,surplus);
+    assert.equal(second.wallet,remaining);
+    assert.equal(r.returnedWallet,remaining);
+    assert.equal(s.wallet,150);
+    assert.equal(G.guildGold(s),treasury-r.actual.wages+surplus);
+    assert.equal(r.returnedGold,G.guildGold(s));
+    assert.equal(s.gold,total+r.actual.net);
+    assert.deepEqual(reload(s),s);
+  }
+});
+
+test("注文は購入者の資金と倉庫の素材を使い、装備の交換・移籍で所有権を守る", () => {
   const s = G.initial();
   s.gold = 650;
   G.unlockParty(s);
   const second = s.extraParties[0];
   G.configure(s,["popo"],"popo","safe",0,second);
   s.wallet=120;
+  unchanged(s,() => G.placeOrder(s,"hall","knife"));
   s.stock.ore=3;
-  s.bag.materials.ore=3;
   const treasury=G.guildGold(s);
   unchanged(s,() => G.placeOrder(s,"hall","knife","plain",second,true));
-  unchanged(s,() => G.placeOrder(s,"hall","knife"));
+  unchanged(s,() => G.placeOrder(s,"hall","knife","plain",second));
   const order = G.placeOrder(s,"hall","knife","plain",s);
-  assert.deepEqual([s.wallet,s.bag.materials.ore,G.guildGold(s)],[120-order.fee,2,treasury]);
+  assert.deepEqual([s.wallet,s.stock.ore,G.guildGold(s)],[120-order.fee,2,treasury]);
   G.wearOrder(s,0,"mina");
   assert.equal(G.outfittedStat(s,G.person(s,"mina"),"atk"),14);
   unchanged(s,() => G.wearOrder(s,0,"popo"));
@@ -196,6 +226,128 @@ test("移行前の遠征・倉庫・装備を引き継ぎ、保存し直して�
   const s=reload(old);
   assert.deepEqual([s.tributeRate,s.wallet,s.equipment[0].quality,s.equipment[0].owner],[25,0,2,0]);
   const r=finish(s);
-  assert.deepEqual([r.actual.tribute,s.supplies.medicine,s.wallet,G.materialAvailable(s,"herb")],[25,2,45,3]);
+  assert.deepEqual([r.actual.tribute,s.supplies.medicine,s.wallet,G.materialAvailable(s,"herb")],[25,2,45,5]);
   assert.deepEqual(reload(s),s);
+});
+
+test("旧セーブの全隊の素材を共有在庫に戻し、遠征中の荷物と高品質の補給品を引き継ぐ", () => {
+  const old = G.initial();
+  G.unlockParty(old);
+  const second = old.extraParties[0];
+  G.configure(old,["gald"],"gald","safe",0,second);
+  G.depart(old,second);
+  G.step(old,second);
+  old.stock = {herb:40,ore:20}; // 第1隊31/15、第2隊4/2、残りは倉庫
+  old.bag.materials = {herb:31,ore:15};
+  second.bag.materials = {herb:4,ore:2};
+  second.bag.supplies.medicine = 3;
+  second.bag.lots = [{key:"medicine",quality:2,count:3}];
+  const s = reload(old), team = s.extraParties[0];
+  assert.deepEqual([G.materialAvailable(s,"herb"),G.materialAvailable(s,"ore")],[40,20]);
+  assert.ok(G.parties(s).every(t => !("materials" in t.bag)));
+  assert.deepEqual(team.bag.supplies,second.bag.supplies);
+  assert.deepEqual(team.bag.lots,second.bag.lots);
+  assert.deepEqual(team.trip.cargo,{herb:2,ore:0});
+  assert.deepEqual(reload(s),s);
+  G.returnHome(s,team);
+  assert.deepEqual(s.stock,{herb:42,ore:20});
+  assert.deepEqual(reload(s),s);
+});
+
+test("帰還報酬と返金から購入できる境界を判定し、隊の支出後に残った超過額だけを戻す", () => {
+  for (const [initialWallet,cost,transfer] of [[65,0,25],[66,26,0],[67,26,1]]) {
+    const s = G.initial();
+    s.wallet = initialWallet;
+    const total = s.gold, treasury = G.guildGold(s);
+    G.configure(s,s.party,s.leader,"safe",1);
+    G.depart(s);
+    const r = finish(s);
+    assert.deepEqual([r.actual.equipmentCost,r.actual.walletSurplus,r.returnedWallet],[cost,transfer,100]);
+    assert.equal(s.gold,total+r.actual.net);
+    assert.equal(G.guildGold(s),treasury+r.actual.tribute-r.actual.wages+transfer);
+    assert.deepEqual(s.stock,r.surplus);
+    assert.equal(s.town.workshops.hall.xp,cost ? 2 : 0);
+    assert.equal(r.log.filter(e => e.outfit).length,cost ? 1 : 0);
+    if (cost) {
+      const item = s.equipment[0];
+      assert.deepEqual([item.name,item.wearer,item.owner,item.price],["旅の小刀","mina",1,26]);
+      assert.equal(G.outfittedStat(s,s.roster[0],"atk"),G.stat(s.roster[0],"atk")+2);
+    }
+    assert.deepEqual(reload(s),s);
+  }
+});
+
+test("週初めに方針と職業が合う隊員を選び、素材込みの代金をその隊の財布だけから払う", () => {
+  for (const [policy,slot,wearer] of [["safe","armor","gald"],["bold","weapon","mina"],["gather","charm","popo"]]) {
+    const s = G.initial();
+    s.gold=1000;
+    G.build(s,"east","shop","armor");
+    G.build(s,"west","shop","magic");
+    s.policy=policy;
+    s.wallet=126;
+    const treasury=G.guildGold(s);
+    G.nextWeek(s,true);
+    assert.deepEqual(s.equipment.map(i => [i.slot,i.wearer,i.owner]),[[slot,wearer,1]]);
+    assert.equal(s.wallet,100);
+    assert.equal(G.guildGold(s),treasury+30+G.facilityTotals(s.town).income);
+    assert.equal(s.morningMail[0].partyNumber,1);
+    assert.match(s.morningMail[0].message,/26 G/);
+    assert.ok(G.morningPlans(s).length);
+    assert.deepEqual(reload(s),s);
+  }
+});
+
+test("帰還した隊だけが営業中の工房で上位装備を購入し、同等品は買い直さない", () => {
+  const s=G.initial();
+  s.gold=1000;
+  G.unlockParty(s);
+  const second=s.extraParties[0];
+  G.configure(s,["gald"],"gald","bold",0,second);
+  G.build(s,"west","forge");
+  G.learnSkill(s,"west","sword");
+  second.wallet=26;
+  G.placeOrder(s,"hall","knife","plain",second,true);
+  G.wearOrder(s,0,"gald");
+  G.depart(s);
+  s.wallet=160;
+  second.wallet=162; // 食料10G、運転資金100G、買い替え予算52G
+  G.depart(s,second);
+  s.town.smithReadyWeek=s.week+2;
+  G.returnHome(s,second);
+  const r=G.reportFor(s,second);
+  assert.equal(r.actual.equipmentCost,52);
+  assert.equal(s.equipment[0].wearer,null);
+  const item=s.equipment[1];
+  assert.deepEqual([item.shopId,item.owner,item.wearer,item.name],["west",2,"gald","街道の長剣・剣仕立て"]);
+  assert.deepEqual([s.wallet,second.wallet],[160,100]);
+  second.wallet=152;
+  G.advanceTime(s,G.weekMillis);
+  assert.equal(s.phase,"explore");
+  assert.equal(s.equipment.length,2);
+  assert.deepEqual([s.wallet,second.wallet],[160,152]);
+  assert.deepEqual(reload(s),s);
+});
+
+test("休業中の工房には発注せず、同じ装備が袋にあれば購入費をかけずに使う", () => {
+  const s=G.initial();
+  s.gold=500;
+  G.configure(s,["mina"],"mina","bold",0);
+  G.build(s,"west","forge");
+  G.learnSkill(s,"west","axe");
+  s.town.repairs.west={remaining:0};
+  s.town.smithReadyWeek=4;
+  s.wallet=152;
+  G.nextWeek(s,true);
+  assert.equal(s.wallet,152);
+  assert.deepEqual(s.equipment,[]);
+  assert.equal(s.morningMail.length,0);
+
+  delete s.town.smithReadyWeek;
+  G.placeOrder(s,"hall","knife","plain",s,true);
+  const total=s.gold;
+  G.nextWeek(s,true);
+  assert.deepEqual(s.equipment.map(i => i.wearer),["mina"]);
+  assert.equal(s.wallet,126);
+  assert.equal(s.gold,total+30+G.facilityTotals(s.town).income);
+  assert.match(s.morningMail[0].message,/隊の持ち物から「旅の小刀」/);
 });

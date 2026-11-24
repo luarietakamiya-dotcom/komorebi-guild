@@ -183,9 +183,11 @@ test("大工房で稼働店だけが毎週成長し、交易会館は購入額�
   const before=G.guildGold(s);
   G.placeOrder(s,"west","vial","plain",null,true);
   assert.equal(G.guildGold(s),before-quote().price);
-  s.stock.ore=s.bag.materials.ore=1;
+  s.stock.ore=1;
+  const saleBalance=G.guildGold(s);
   G.sell(s,"ore",s);
-  assert.equal(s.wallet,30);
+  assert.equal(G.guildGold(s),saleBalance+30);
+  assert.equal(s.wallet,0);
   const funds=G.guildGold(s), income=G.townTotals(s.town).income;
   G.nextWeek(s,true);
   assert.equal(G.guildGold(s),funds+30+income);

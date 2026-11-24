@@ -245,6 +245,27 @@ test("かばう相手は優先順と条件で変わり、自分・不在・行�
   assert.equal(solo.trip.effects[0].rule,3);
 });
 
+test("盾役は残HP割合が最も低い仲間、危機のリーダー、自分の手当ての順で行動する", () => {
+  const s = G.initial(), tank = G.person(s,"gald");
+  G.setGambits(s,tank.id,G.preset(tank,"tank"));
+  enterFight(s,["popo","mina","gald"]);
+  s.trip.fight.turn = s.trip.fight.order.indexOf(tank.id);
+  function act(leaderHP,allyHP,alreadyCovered = false) {
+    const state = copy(s), [leader,ally,shield] = state.trip.unit;
+    leader.hp = leaderHP; ally.hp = allyHP; shield.hp = 22; // 40％
+    if (alreadyCovered) state.trip.fight.covers[leader.id] = ally.id;
+    G.step(state);
+    const {rule,kind,target} = state.trip.effects[0];
+    return [rule,kind,target];
+  }
+  // ミナの13/40は、リーダーのポポの12/28より低い。
+  assert.deepEqual(act(12,13),[1,"cover","mina"]);
+  assert.deepEqual(act(21,20),[1,"cover","mina"]); // ミナがちょうど50％
+  assert.deepEqual(act(21,21),[2,"cover","popo"]); // リーダーがちょうど75％
+  assert.deepEqual(act(28,40),[3,"heal","gald"]);
+  assert.deepEqual(act(28,13,true),[3,"heal","gald"]);
+});
+
 test("詠唱では構えを消費せず、術の動揺・瀕死・救護はかばった本人に適用する", () => {
   const s = G.initial();
   enterFight(s,undefined,"bold");

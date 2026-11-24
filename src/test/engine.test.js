@@ -25,7 +25,7 @@ test("安全帰還の帳簿・研究・翌週の装備と次の受注", () => {
 test("負傷続行の帳簿・療養期間・給与", () => {
   const s = G.initial(); G.setQuest(s, "ore"); toFork(s);
   assert.equal(s.trip.route, "pass"); const r = complete(s);
-  assert.deepEqual([r.success, r.delivered, r.severe, r.actual.net, s.gold], [true, 2, 1, 186, 426]);
+  assert.deepEqual([r.success, r.delivered, r.severe, r.actual.equipmentCost, r.actual.net, s.gold], [true, 2, 1, 52, 134, 374]);
   assert.deepEqual(s.stock, { herb: 2, ore: 2 });
   G.nextWeek(s); assert.equal(G.available(s, G.person(s, "popo")), false);
   assert.throws(() => G.configure(s, defaults, "gald", "safe", 0));

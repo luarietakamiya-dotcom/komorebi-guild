@@ -169,12 +169,13 @@ test("没収の間は被害を受けた隊だけの資産と携行品を精算�
     G.unlockParty(s);
     s.wallet=130;
     s.extraParties[0].wallet=60;
-    s.bag.materials.ore=2; s.stock.ore=8;
+    s.stock.ore=8;
     s.bag.supplies.medicine=1; s.bag.lots=[{key:"medicine",quality:4,count:1}];
     s.equipment=[{owner:1,wearer:null},{owner:2,wearer:null},{owner:0,wearer:null}];
   });
   const guild=G.guildGold(s);
   s.trip.cargo.herb=5;
+  s.trip.cargo.ore=2;
   t.mock.method(Math,"random",()=>.1);
   visit(s,4,"cache");
   assert.deepEqual(s.trip.cargo,{herb:0,ore:0});
@@ -182,7 +183,7 @@ test("没収の間は被害を受けた隊だけの資産と携行品を精算�
   assert.deepEqual(s.trip.packed.medicine,[]);
   assert.equal(s.wallet,0);
   assert.equal(G.guildGold(s),guild);
-  assert.equal(s.stock.ore,6);
+  assert.equal(s.stock.ore,8);
   assert.equal(s.extraParties[0].wallet,60);
   assert.deepEqual(s.equipment.map(i=>i.owner),[2,0]);
   G.returnHome(s);
