@@ -21,6 +21,7 @@ test("初期の3人隊は薬1本を使っても全依頼で売却前の見積り
   const s = G.initial();
   G.configure(s,s.party,s.leader,s.policy,1);
   const first = G.estimate(s);
+  assert.deepEqual([first.tributeRate,first.tribute,first.partyReward],[25,50,150]);
   assert.deepEqual([first.reward,first.share,first.food,first.medicine,first.wages,first.net],
     [200,60,30,30,36,44]);
   for (const [quest,details] of Object.entries(G.quests)) {
@@ -49,12 +50,12 @@ test("受注時の上納率を隊別に固定し、達成・未達の報酬、�
   assert.equal(second.bag.materials.herb,4);
   const first = finish(s);
   assert.deepEqual([first.actual.reward,first.actual.tributeRate,first.actual.tribute,
-    first.actual.partyReward,first.actual.share,s.wallet],[200,10,20,180,60,120]);
-  assert.equal(G.guildGold(s),240-50-30-36+20);
+    first.actual.partyReward,first.actual.share,s.wallet],[200,25,50,150,60,90]);
+  assert.equal(G.guildGold(s),240-50-30-36+50);
   assert.deepEqual(s.bag.materials,{herb:2,ore:1});
   assert.equal(G.materialAvailable(s,"herb",null),0);
   G.sell(s,"herb",second);
-  assert.deepEqual([s.wallet,second.wallet,second.bag.materials.herb],[120,10,3]);
+  assert.deepEqual([s.wallet,second.wallet,second.bag.materials.herb],[90,10,3]);
   unchanged(s,() => G.sell(s,"herb",null));
   unchanged(s,() => G.returnHome(s));
   assert.deepEqual(reload(s),s);
@@ -162,19 +163,39 @@ test("深層の宝箱・番獣だけが別々の一点物を落とし、履歴�
   assert.deepEqual(reload(s),s);
 });
 
+test("旧セーブは初期値10%だけを移行し、受注済みの見積りと移行後に選んだ10%を保つ", () => {
+  const old = G.initial();
+  G.setProfile(old,0,{name:"森のギルド",tributeRate:10});
+  G.depart(old);
+  delete old.tributeRateMigrated;
+  const s = reload(old);
+  assert.equal(s.tributeRate,25);
+  assert.deepEqual(s.trip.quote,old.trip.quote);
+  assert.equal(finish(s).actual.tribute,20);
+  G.setProfile(s,0,{name:"森のギルド",tributeRate:10});
+  assert.equal(reload(s).tributeRate,10);
+  for (const rate of [0,12,30]) {
+    old.tributeRate = rate;
+    assert.equal(reload(old).tributeRate,rate);
+  }
+  for (const rate of [51,12.5]) {
+    unchanged(s,() => G.setProfile(s,0,{name:"森のギルド",tributeRate:rate}));
+  }
+});
+
 test("移行前の遠征・倉庫・装備を引き継ぎ、保存し直しても二重に精算しない", () => {
   const old = G.initial();
   old.stock.herb=3; old.supplies.medicine=2;
   G.configure(old,old.party,"mina","safe",2); G.depart(old);
   // 報酬改定前に受注した遠征の見積り。
   Object.assign(old.trip.quote, {reward:100, share:30, net:4});
-  delete old.bag; delete old.wallet; delete old.tributeRate; delete old.lots;
+  delete old.bag; delete old.wallet; delete old.tributeRate; delete old.tributeRateMigrated; delete old.lots;
   delete old.trip.packed; delete old.trip.partyPaid;
   delete old.trip.quote.tributeRate; delete old.trip.quote.tribute; delete old.trip.quote.partyReward;
   old.equipment=[{shopId:"hall",level:2,name:"旅の小刀",slot:"weapon",wearer:"mina",effects:{atk:3}}];
   const s=reload(old);
-  assert.deepEqual([s.tributeRate,s.wallet,s.equipment[0].quality,s.equipment[0].owner],[10,0,2,0]);
+  assert.deepEqual([s.tributeRate,s.wallet,s.equipment[0].quality,s.equipment[0].owner],[25,0,2,0]);
   const r=finish(s);
-  assert.deepEqual([r.actual.tribute,s.supplies.medicine,s.wallet,G.materialAvailable(s,"herb")],[10,2,60,3]);
+  assert.deepEqual([r.actual.tribute,s.supplies.medicine,s.wallet,G.materialAvailable(s,"herb")],[25,2,45,3]);
   assert.deepEqual(reload(s),s);
 });

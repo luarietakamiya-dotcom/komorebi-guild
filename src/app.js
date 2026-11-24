@@ -1034,7 +1034,7 @@ function profileForm() {
         <label>ギルド方針<input name="policy" value="${esc(p.policy)}"></label>
         <div class="policy-suggestions" role="group" aria-label="方針の候補">${policySuggestions.map(label =>
           action("suggest-policy", label, "btn", `data-id="${label}"`)).join("")}</div>
-        <label>所属隊の依頼報酬の上納率（%）<input name="tributeRate" type="number" min="0" max="30" step="1" required value="${p.tributeRate ?? state.tributeRate}"></label>
+        <label>所属隊の依頼報酬の上納率（%）<input name="tributeRate" type="number" min="0" max="${Guild.maxTributeRate}" step="1" required value="${p.tributeRate ?? state.tributeRate}"></label>
         <fieldset><legend>階級と昇級試験</legend>
           <label>階級名（低い順に1行1段）<textarea name="rankNames" required rows="5">${esc((p.rankNames || state.ranks.names).join("\n"))}</textarea></label>
           <small>段を減らしても取得済みの段位は記録されます。設定にない段位を要する依頼は休止します。</small>

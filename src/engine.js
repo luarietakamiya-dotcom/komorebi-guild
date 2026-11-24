@@ -131,7 +131,7 @@ const Guild = (() => {
     check(Number.isInteger(slot) && (slot === 0 || team), "設定する隊を選んでください。");
     check(typeof data?.name === "string" && data.name.trim(), "名前を入力してください。");
     if (!slot && data.tributeRate !== undefined)
-      check(validRate(data.tributeRate), "上納率は0〜30%の整数で指定してください。");
+      check(validRate(data.tributeRate), `上納率は0〜${maxTributeRate}%の整数で指定してください。`);
     if (slot === 0 && data.rankNames !== undefined) setRankPolicy(s, data.rankNames, data.examFocus, data.examStrictness);
     if (slot === 0) {
       s.guildProfile = profileFor(slot, data);
@@ -352,7 +352,8 @@ const Guild = (() => {
   const effectNames = {atk:"攻撃", def:"防御", spd:"速さ", hp:"HP", ward:"結界設置で町の防衛",
     medicine:"回復薬", ration:"保存食", tonic:"強壮食薬", spark:"火花玉"};
   const defaultSpecialty = {forge:"forge", shop:"armor", tavern:"kitchen"};
-  const validRate = rate => Number.isInteger(rate) && rate >= 0 && rate <= 30;
+  const defaultTributeRate = 25, maxTributeRate = 50;
+  const validRate = rate => Number.isInteger(rate) && rate >= 0 && rate <= maxTributeRate;
   const supplyCounts = () => ({medicine:0, ration:0, tonic:0, spark:0});
   function restorePurse(team) {
     team.wallet ??= 0;
@@ -456,7 +457,9 @@ const Guild = (() => {
     }
   }
   function restoreWorkshops(s) {
-    if (!validRate(s.tributeRate)) s.tributeRate = 10;
+    if (!validRate(s.tributeRate) || (!s.tributeRateMigrated && s.tributeRate === 10))
+      s.tributeRate = defaultTributeRate;
+    s.tributeRateMigrated = true;
     s.lots ??= [];
     parties(s).forEach(restorePurse);
     s.supplies ??= {medicine:0, ration:0, tonic:0, spark:0};
@@ -2735,7 +2738,7 @@ const Guild = (() => {
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
     orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, buildings, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
     payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, hire, register, estimate, depart, step, choices, reply,
-    returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile,
+    returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile, maxTributeRate,
     nextDay:nextWeek, dayStarted:weekStarted, dayMillis:weekMillis };
 })();
 if (typeof module !== "undefined" && module.exports) module.exports = Guild;

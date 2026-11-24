@@ -841,30 +841,31 @@ test("町の地図から緊急帰還を指示すると遠征が精算され、�
 test("ギルド設定の上納率を精算と帰還記録に残し、隊の財布で買った装備を持ち物に表示する", () => {
   let game = openGame();
   game.click("nav","hall"); game.click("guild-settings");
-  assert.match(game.html("#dialog-body"), /name="tributeRate"/);
-  game.fillProfile({name:"木もれびギルド",tributeRate:"12"});
+  assert.match(game.html("#dialog-body"), /name="tributeRate"[^>]*min="0" max="50"[^>]*value="25"/);
+  game.fillProfile({name:"木もれびギルド",tributeRate:"50"});
   game.submitProfile();
   game = game.reload();
   game.click("prepare");
   game.select("meds","1");
   assert.match(game.html("#dialog-body"), /出発前の見積（合計収支）<\/b><strong>\+44 G<\/strong>/);
+  assert.match(game.html("#dialog-body"), /報酬 200 → 上納 100（50%）→ 隊の取り分 100 G/);
   game.click("depart");
   for (let i=0;i<4;i++) game.tick();
   const settled=game.state();
-  assert.equal(settled.history[0].actual.tribute,24);
-  assert.equal(settled.wallet,116);
-  assert.match(game.html("#screen"), /ギルドへ上納（12%）/);
+  assert.equal(settled.history[0].actual.tribute,100);
+  assert.equal(settled.wallet,40);
+  assert.match(game.html("#screen"), /ギルドへ上納（50%）/);
   game.click("nav","shops"); game.click("open-shop","hall");
   game.select("shop-buyer","1");
   game.click("place-order");
-  assert.deepEqual([game.state().wallet,game.state().bag.materials.ore],[114,0]);
+  assert.deepEqual([game.state().wallet,game.state().bag.materials.ore],[38,0]);
   assert.equal(game.state().equipment[0].owner,1);
   assert.equal(Guild.guildGold(game.state()),Guild.guildGold(settled));
   game = game.reload();
   game.click("nav","hall");
   assert.match(game.html("#screen"), /旅の小刀[\s\S]*⭐[\s\S]*攻撃\+2/);
   game.click("nav","history");
-  assert.match(game.html("#screen"), /上納後の隊の取り分[\s\S]*176 G/);
+  assert.match(game.html("#screen"), /上納後の隊の取り分[\s\S]*100 G/);
 });
 
 test("町とホールの施設一覧に実効値と休止状態、人物手帳に士気倍率を表示する", () => {
