@@ -15,17 +15,17 @@ function complete(s) {
 test("安全帰還の帳簿・研究・翌週の装備と次の受注", () => {
   const s = G.initial();
   toFork(s, "mina", "safe"); const r = complete(s);
-  assert.deepEqual([r.delivered, s.gold, r.actual.net, r.xp], [2, 244, 4, 6]);
+  assert.deepEqual([r.delivered, s.gold, r.actual.net, r.xp], [2, 314, 74, 6]);
   assert.deepEqual(s.stock, { herb: 2, ore: 1 });
-  G.donate(s); G.sell(s, "herb"); G.sell(s, "herb"); assert.equal(s.gold, 264);
+  G.donate(s); G.sell(s, "herb"); G.sell(s, "herb"); assert.equal(s.gold, 334);
   assert.throws(() => G.sell(s, "herb")); assert.throws(() => G.returnHome(s)); assert.throws(() => G.buy(s));
-  G.nextWeek(s); G.buy(s); G.equip(s, "gald"); assert.equal(s.gold, 184);
+  G.nextWeek(s); G.buy(s); G.equip(s, "gald"); assert.equal(s.gold, 254);
   G.setQuest(s, "order"); G.depart(s); assert.equal(s.trip.quest, "order");
 });
 test("負傷続行の帳簿・療養期間・給与", () => {
   const s = G.initial(); G.setQuest(s, "ore"); toFork(s);
   assert.equal(s.trip.route, "pass"); const r = complete(s);
-  assert.deepEqual([r.success, r.delivered, r.severe, r.actual.net, s.gold], [true, 2, 1, 60, 300]);
+  assert.deepEqual([r.success, r.delivered, r.severe, r.actual.net, s.gold], [true, 2, 1, 186, 426]);
   assert.deepEqual(s.stock, { herb: 2, ore: 2 });
   G.nextWeek(s); assert.equal(G.available(s, G.person(s, "popo")), false);
   assert.throws(() => G.configure(s, defaults, "gald", "safe", 0));
@@ -52,7 +52,7 @@ test("未達と期限切れは納品ゼロ、在庫の流用・その週再出�
 test("復帰薬は対象を起こし、未使用分は返品。全員戦闘不能でも帰還可能", () => {
   const s = G.initial(); toFork(s, "mina", "gather", 2); G.step(s);
   G.reply(s, "med"); assert.equal(s.trip.unit[2].hp, 16); G.returnHome(s);
-  assert.equal(s.history[0].actual.medicine, 30); assert.equal(s.gold, 214);
+  assert.equal(s.history[0].actual.medicine, 30); assert.equal(s.gold, 284);
   const solo = G.initial(); toFork(solo, "popo", "gather", 0, ["popo"]); G.reply(solo, "pass"); G.step(solo);
   assert.deepEqual(G.choices(solo), ["return", "delegate"]); G.reply(solo, "delegate"); assert.equal(solo.phase, "report");
 });

@@ -17,6 +17,24 @@ function unchanged(s,action) {
   assert.equal(JSON.stringify(s),saved);
 }
 
+test("初期の3人隊は薬1本を使っても全依頼で売却前の見積りが黒字になる", () => {
+  const s = G.initial();
+  G.configure(s,s.party,s.leader,s.policy,1);
+  const first = G.estimate(s);
+  assert.deepEqual([first.reward,first.share,first.food,first.medicine,first.wages,first.net],
+    [200,60,30,30,36,44]);
+  for (const [quest,details] of Object.entries(G.quests)) {
+    const quote = G.estimate(s,{...s,quest});
+    assert.ok(quote.net >= 30, details.name);
+  }
+  const before = s.gold;
+  G.depart(s);
+  assert.deepEqual(s.trip.quote,first);
+  const {actual} = finish(s);
+  assert.equal(actual.net,first.net + first.medicine - actual.medicine);
+  assert.equal(s.gold,before + actual.net);
+});
+
 test("受注時の上納率を隊別に固定し、達成・未達の報酬、金庫、採集品を精算する", () => {
   const s = G.initial();
   G.unlockParty(s);
@@ -31,12 +49,12 @@ test("受注時の上納率を隊別に固定し、達成・未達の報酬、�
   assert.equal(second.bag.materials.herb,4);
   const first = finish(s);
   assert.deepEqual([first.actual.reward,first.actual.tributeRate,first.actual.tribute,
-    first.actual.partyReward,first.actual.share,s.wallet],[100,10,10,90,30,60]);
-  assert.equal(G.guildGold(s),240-50-30-36+10);
+    first.actual.partyReward,first.actual.share,s.wallet],[200,10,20,180,60,120]);
+  assert.equal(G.guildGold(s),240-50-30-36+20);
   assert.deepEqual(s.bag.materials,{herb:2,ore:1});
   assert.equal(G.materialAvailable(s,"herb",null),0);
   G.sell(s,"herb",second);
-  assert.deepEqual([s.wallet,second.wallet,second.bag.materials.herb],[60,10,3]);
+  assert.deepEqual([s.wallet,second.wallet,second.bag.materials.herb],[120,10,3]);
   unchanged(s,() => G.sell(s,"herb",null));
   unchanged(s,() => G.returnHome(s));
   assert.deepEqual(reload(s),s);
@@ -148,6 +166,8 @@ test("移行前の遠征・倉庫・装備を引き継ぎ、保存し直して�
   const old = G.initial();
   old.stock.herb=3; old.supplies.medicine=2;
   G.configure(old,old.party,"mina","safe",2); G.depart(old);
+  // 報酬改定前に受注した遠征の見積り。
+  Object.assign(old.trip.quote, {reward:100, share:30, net:4});
   delete old.bag; delete old.wallet; delete old.tributeRate; delete old.lots;
   delete old.trip.packed; delete old.trip.partyPaid;
   delete old.trip.quote.tributeRate; delete old.trip.quote.tribute; delete old.trip.quote.partyReward;

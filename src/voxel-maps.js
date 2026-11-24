@@ -162,7 +162,11 @@ const GuildVoxelMaps = (() => {
     spring:41, crystal:28, chest:28, fern:24, torch:12
   };
   function scenery(id,u,v,scale,view) {
-    return prop(id,u,v,scale,footprints[id]*scale*.61,view);
+    const item = prop(id,u,v,scale,footprints[id]*scale*.61,view);
+    // Illustration sizes are independent of parcel radii and the original tap silhouettes.
+    if (id === "guild") item.magnification = 1.55;
+    if (id === "inn") item.magnification = 1.22;
+    return item;
   }
 
   function dungeon() {

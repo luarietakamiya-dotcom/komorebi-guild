@@ -85,6 +85,23 @@ const GuildVoxel = (() => {
     return { id, depth, x, y, scale, radius };
   }
 
+  function drawHallFlag(ctx, flag, camera, x, y, scale) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(scale,scale);
+    if (camera) {
+      // Same object-space mast and projection as tools/town-stamps.py.
+      const a = camera.angle - Math.PI/4;
+      ctx.translate(24*Math.cos(a)-12*Math.sin(a), .52*(-24*Math.sin(a)-12*Math.cos(a))-96);
+      ctx.transform(Math.cos(camera.angle),-.52*Math.sin(camera.angle),0,1,0,0);
+      ctx.drawImage(flag,0,0,30,16);
+    } else {
+      // The painted tower carries its standard on the gold pole at the right eave.
+      ctx.drawImage(flag,31.8,-82.6,24,14);
+    }
+    ctx.restore();
+  }
+
   function scene(kind, props, camera) {
     const view = views[kind];
     const base = document.createElement("canvas");
@@ -94,16 +111,20 @@ const GuildVoxel = (() => {
     props.sort((a,b) => a.depth-b.depth);
     const art = new Map();
     let preparing;
-    function draw(ctx, actors, groundOverlay) {
+    function draw(ctx, actors, groundOverlay, guildFlag) {
       ctx.drawImage(base, 0, 0);
       if (groundOverlay) groundOverlay(ctx);
       actors.sort((a,b) => a.depth-b.depth);
       let i = 0;
-      for (const {id, depth, x, y, scale} of props) {
+      for (const {id, depth, x, y, scale, magnification = 1} of props) {
         while (i < actors.length && actors[i].depth < depth) actors[i++].paint(ctx);
         const object = art.get(id);
-        if (object) ctx.drawImage(object.canvas, ...(object.crop || []), x-stampLayout.pivot*scale, y-stampLayout.ground*scale,
-          stampLayout.width*scale, stampLayout.height*scale);
+        if (!object) continue;
+        const size = scale*magnification;
+        ctx.drawImage(object.canvas, ...(object.crop || []), x-stampLayout.pivot*size, y-stampLayout.ground*size,
+          stampLayout.width*size, stampLayout.height*size);
+        if (id === "guild" && guildFlag?.complete && guildFlag.naturalWidth)
+          drawHallFlag(ctx,guildFlag,camera,x,y,size);
       }
       while (i < actors.length) actors[i++].paint(ctx);
     }

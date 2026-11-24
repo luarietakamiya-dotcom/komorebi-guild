@@ -78,3 +78,19 @@ const drawEmblem = (() => {
     </svg>`;
   };
 })();
+
+function guildStandard(emblem) {
+  const cloth = "M1 5Q16 -2 32 4T63 8L54 18L63 26Q48 33 32 27T1 32Z";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="126" height="68" viewBox="0 0 64 34">
+    <defs><linearGradient id="fold"><stop stop-color="#fff" stop-opacity=".16"/>
+      <stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset=".68" stop-color="#251c18" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".12"/></linearGradient></defs>
+    <path d="${cloth}" fill="${emblem.ground}" stroke="#715332" stroke-width="1.5"/>
+    <path d="M2 6Q16 0 32 5T61 9M2 30Q17 23 32 26T60 26" fill="none" stroke="${emblem.ink}"/>
+    <g transform="translate(9 3) scale(.72)">${drawEmblem(emblem)}</g>
+    <path d="${cloth}" fill="url(#fold)"/>
+  </svg>`;
+  const flag = new Image();
+  flag.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  return flag;
+}

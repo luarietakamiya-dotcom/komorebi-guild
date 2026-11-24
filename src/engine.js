@@ -640,17 +640,17 @@ const Guild = (() => {
     return {defense, food, income, ore, strength};
   }
   const quests = {
-    herb: { name: "木もれびの薬草採集", item: "herb", count: 2, reward: 100, risk: "低", note: "道具屋に届ける、新鮮な薬草を集めよう。" },
-    ore: { rank:1, name: "洞窟のきらめき鉱石", item: "ore", count: 2, reward: 180, risk: "高", note: "岩場の近道で、青く光る鉱石を採ろう。" },
-    provisions: { name: "宿屋の薬草仕入れ", item: "herb", count: 3, reward: 110, risk: "低", note: "旅人のために、宿屋へ薬草を届けよう。" },
-    tools: { name: "工房の道具修理", item: "ore", count: 1, reward: 85, risk: "低", note: "修理に使う鉱石をひとつ持ち帰ろう。" },
-    garden: { name: "薬草園の植え替え", item: "herb", count: 4, reward: 130, risk: "低", note: "採集路で、薬草園に植える株を集めよう。" },
-    survey: {rank:2, name:"薬師会の標本採取", item:"herb", count:4, reward:225, risk:"中", note:"薬師会に、群生地の標本を届けよう。"},
-    vault: {rank:3, name:"王立工房の晶鉱調達", item:"ore", count:4, reward:360, risk:"高", note:"遠征装備のため、晶鉱をまとめて持ち帰ろう。"},
-    crown: {rank:4, name:"王都の秘薬調達", item:"herb", count:6, reward:450, risk:"高", note:"王都の調薬師へ、深層に育つ薬草を届けよう。"},
-    waystation: {rank:1, name:"街道の救護所へ", item:"herb", count:3, reward:160, risk:"低", note:"街道の救護所に傷薬の材料を届けよう。"},
-    townworks: {rank:2, name:"町を守る門の補修", item:"ore", count:2, reward:260, risk:"中", note:"町の門を補強する鍛冶職人に鉱石を届けよう。"},
-    order: { rank:1, name: "マルタの特別注文", item: "ore", count: 3, reward: 300, risk: "高", note: "トトの工房に、まとめて鉱石を届けよう。" }
+    herb: { name: "木もれびの薬草採集", item: "herb", count: 2, reward: 200, risk: "低", note: "道具屋に届ける、新鮮な薬草を集めよう。" },
+    ore: { rank:1, name: "洞窟のきらめき鉱石", item: "ore", count: 2, reward: 360, risk: "高", note: "岩場の近道で、青く光る鉱石を採ろう。" },
+    provisions: { name: "宿屋の薬草仕入れ", item: "herb", count: 3, reward: 220, risk: "低", note: "旅人のために、宿屋へ薬草を届けよう。" },
+    tools: { name: "工房の道具修理", item: "ore", count: 1, reward: 180, risk: "低", note: "修理に使う鉱石をひとつ持ち帰ろう。" },
+    garden: { name: "薬草園の植え替え", item: "herb", count: 4, reward: 260, risk: "低", note: "採集路で、薬草園に植える株を集めよう。" },
+    survey: {rank:2, name:"薬師会の標本採取", item:"herb", count:4, reward:450, risk:"中", note:"薬師会に、群生地の標本を届けよう。"},
+    vault: {rank:3, name:"王立工房の晶鉱調達", item:"ore", count:4, reward:720, risk:"高", note:"遠征装備のため、晶鉱をまとめて持ち帰ろう。"},
+    crown: {rank:4, name:"王都の秘薬調達", item:"herb", count:6, reward:900, risk:"高", note:"王都の調薬師へ、深層に育つ薬草を届けよう。"},
+    waystation: {rank:1, name:"街道の救護所へ", item:"herb", count:3, reward:320, risk:"低", note:"街道の救護所に傷薬の材料を届けよう。"},
+    townworks: {rank:2, name:"町を守る門の補修", item:"ore", count:2, reward:520, risk:"中", note:"町の門を補強する鍛冶職人に鉱石を届けよう。"},
+    order: { rank:1, name: "マルタの特別注文", item: "ore", count: 3, reward: 600, risk: "高", note: "トトの工房に、まとめて鉱石を届けよう。" }
   };
   // Coordinates locate rooms on a map sheet. The surface exit has no depth.
   function room(name, event, depth, x, y, next = []) {

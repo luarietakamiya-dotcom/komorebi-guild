@@ -12,15 +12,25 @@ function game() {
   let frame;
   class Picture {
     set src(name) {
+      if (name.startsWith("data:image/svg+xml")) {
+        this.svg = decodeURIComponent(name.slice(name.indexOf(",")+1));
+        this.complete = true;
+        this.naturalWidth = 126;
+        return;
+      }
       this.name = name;
       requests.push(name);
       assert.ok(fs.existsSync(path.join(__dirname,"../assets",name+".webp")),name);
+      if (name.startsWith("scenery_")) {
+        this.naturalWidth = 276;
+        this.naturalHeight = 306;
+      }
       queueMicrotask(()=>this.onload());
     }
   }
   const box = vm.createContext({Guild,Image:Picture,document:{createElement:()=>({getContext:()=>ctx})},
     requestAnimationFrame:cb=>(frame=cb,1),cancelAnimationFrame:noop,window:{matchMedia:()=>({matches:false})}});
-  for (const file of ["stacks","voxel","voxel-maps","scenery"])
+  for (const file of ["icons","stacks","voxel","voxel-maps","scenery"])
     vm.runInContext(fs.readFileSync(path.join(__dirname,"..",file+".js"),"utf8"),box);
   const api = vm.runInContext("({maps:GuildVoxelMaps,voxel:GuildVoxel,scenery:GuildScenery,stacks:GuildStacks})",box);
   api.stacks.draw = (_ctx,id,_url,x,y,size,angle)=>actors.push({id,x,y,size,angle});
@@ -29,6 +39,61 @@ function game() {
 function near(actual,expected) {
   expected.forEach((value,i)=>assert.ok(Math.abs(actual[i]-value)<1e-8,actual+" / "+expected));
 }
+
+test("本館と紋章旗は水彩と全16方位で宿屋より大きく描き、張り出した屋根は区画の選択を奪わない", async () => {
+  const {maps,voxel,calls,ctx} = game();
+  const flag = {complete:true,naturalWidth:126};
+  for (const camera of [null,...Array.from({length:16},(_,step)=>voxel.townCamera(step))]) {
+    const prefix = camera ? "turn_" : "scenery_";
+    const [x,y] = camera ? camera.project(...maps.hallSite) : maps.hallSite;
+    const scale = 1.36*(camera?.scale ?? 1);
+    const original = voxel.scene("town",[{id:"guild",x,y,scale,radius:58,depth:0}],camera);
+    await original.prepare(id=>id);
+    const town = maps.get("town",{sunny:"inn"},camera);
+    await town.prepare(id=>id);
+    calls.length = 0;
+    town(ctx,[],null,flag);
+    const hallIndex = calls.findIndex(([image])=>image.name === prefix+"guild");
+    const hall = calls[hallIndex].slice(-4);
+    const inn = calls.find(([image])=>image.name === prefix+"inn").slice(-4);
+    assert.ok(hall[2] > inn[2]*1.3);
+    assert.equal(calls[hallIndex+1][0],flag);
+    near([hall[0]+hall[2]*69/138,hall[1]+hall[3]*116/153],[x,y]);
+    for (let dy=-165;dy<=25;dy+=6) for (let dx=-110;dx<=110;dx+=6) {
+      const px = x+dx*scale, py = y+dy*scale;
+      const hit = town.pickProp(px,py);
+      if (!hit || hit.id === "guild")
+        assert.equal(hit?.id, original.pickProp(px,py)?.id);
+    }
+    if (!camera) assert.equal(town.targetAtPixel(504,281)?.id,"linden");
+    const shops = maps.get("town",{sunny:"shop"},camera);
+    await shops.prepare(id=>id);
+    calls.length = 0;
+    shops(ctx,[]);
+    const shop = calls.find(([image])=>image.name === prefix+"shop").slice(-4);
+    assert.ok(inn[2] > shop[2]*1.15);
+  }
+});
+
+test("町を開くと保存済みの組み合わせ紋章・アップロード紋章を本館の旗に使う", async () => {
+  const {maps,scenery,ctx,calls,frame} = game();
+  const canvas = {dataset:{scene:"town"},clientWidth:1393,getContext:()=>ctx,closest:()=>({clientWidth:1393})};
+  const saved = Guild.initial();
+  const image = "data:image/webp;base64," + fs.readFileSync(path.join(__dirname,"../assets/scenery_flowers.webp")).toString("base64");
+  for (const custom of [undefined,{...saved.guildProfile.emblem,mode:"upload",image,ground:"#365278"}]) {
+    saved.guildProfile.emblem = custom;
+    const emblem = Guild.restore(JSON.parse(JSON.stringify(saved))).guildProfile.emblem;
+    const stop = scenery.mount(canvas,{emblem,people:[],url:id=>id});
+    await maps.get("town").prepare(id=>id);
+    calls.length = 0;
+    frame(0);
+    const flag = calls.find(([img])=>img.svg)?.[0];
+    assert.ok(flag);
+    assert.ok(flag.svg.includes(emblem.ground));
+    assert.equal(flag.svg.includes(image),emblem.mode === "upload");
+    stop();
+  }
+});
 
 test("16方向すべてで各農地区画の全タイルを選択でき、逆投影と強調輪郭が一致する", () => {
   const {maps,voxel} = game();

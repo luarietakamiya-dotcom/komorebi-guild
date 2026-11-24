@@ -305,7 +305,7 @@ const GuildScenery = (() => {
     };
   }
 
-  function mount(canvas, { people, trip, url, fraction, time, raidScene, built, landmark, selectPlot, activePlot, openHall, camera, turn, chatterRate }) {
+  function mount(canvas, { people, trip, url, fraction, time, raidScene, built, landmark, emblem, selectPlot, activePlot, openHall, camera, turn, chatterRate }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return () => {};
     const viewport = canvas.closest(".panorama-scroll");
@@ -315,6 +315,7 @@ const GuildScenery = (() => {
     let draw = GuildVoxelMaps.get(kind,built,camera,landmark);
     let displayed;
     const isTown = kind === "town";
+    const guildFlag = isTown && emblem ? guildStandard(emblem) : null;
     const converse = chatterRate && sceneConversation(canvas,viewport,people,trip,chatterRate);
     if (isTown) viewport.scrollLeft = (canvas.clientWidth - viewport.clientWidth) / 2;
     let hovered, hoverMarker;
@@ -390,7 +391,7 @@ const GuildScenery = (() => {
         const battle = raidScene?.();
         const actors = battle ? townBattle(url,battle.raid,battle.defenders,battle.fraction,reduced.matches,camera) :
           town(people,url,time ? time() : now/1000,reduced.matches,draw.routes,camera);
-        draw(ctx,actors,highlight);
+        draw(ctx,actors,highlight,guildFlag);
         converse?.(now,battle ? [] : actors);
         displayed = draw;
       } else {

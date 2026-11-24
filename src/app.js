@@ -814,12 +814,13 @@ function render() {
   const canvas = $("canvas[data-scene]");
   if (canvas) {
     const viewport = canvas.closest(".town-scroll");
-    if (previous && previous.layout === layout) {
+    const emblem = state.guildProfile.emblem;
+    if (previous && previous.layout === layout && previous.emblem === emblem) {
       viewport.replaceWith(previous.viewport);
     } else {
       previous?.stop();
-      townScene = {layout,viewport,stop:GuildScenery.mount(canvas,
-        {people:walkers,chatterRate:sceneChatterRate,camera:townCamera,turn:delta=>changeTownView(true,delta),url:assetUrl,time:worldSeconds,raidScene:townRaidScene,built:state.town.plots,landmark:state.town.landmark,selectPlot,activePlot,openHall:()=>navigate("hall")})};
+      townScene = {layout,emblem,viewport,stop:GuildScenery.mount(canvas,
+        {people:walkers,chatterRate:sceneChatterRate,camera:townCamera,turn:delta=>changeTownView(true,delta),url:assetUrl,time:worldSeconds,raidScene:townRaidScene,built:state.town.plots,landmark:state.town.landmark,emblem,selectPlot,activePlot,openHall:()=>navigate("hall")})};
     }
     if (scroll !== undefined) townScene.viewport.scrollLeft = scroll;
     if (page==="hall" && selected().phase==="explore") {

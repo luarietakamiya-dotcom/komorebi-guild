@@ -102,7 +102,7 @@ test("週替わりの一般冒険者が階級内で活動し、再開しても�
   assert.equal(s.registry.find(p=>p.id===first.id).contacts,1);
   const gold=s.gold;
   G.collectMarket(s);
-  assert.deepEqual([s.gold,s.stock.herb],[gold+10,1]);
+  assert.deepEqual([s.gold,s.stock.herb],[gold+20,1]);
   assert.throws(()=>G.collectMarket(s));
   assert.deepEqual(reload(s),s);
 });
