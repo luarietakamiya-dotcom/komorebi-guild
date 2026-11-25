@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const G = require("../engine.js");
+const waitForGuest = require("./wait-for-guest");
 const reload = state => G.restore(JSON.parse(JSON.stringify(state)));
 const policy = (s,names,focus="practice",strictness="standard") =>
   G.setProfile(s,0,{...s.guildProfile,rankNames:names,examFocus:focus,examStrictness:strictness});
@@ -128,22 +129,23 @@ test("二人の固有人物に別々の出会い・加入条件があり、固�
   const s=G.initial();
   assert.ok(!s.visitors.includes("shusai") && !s.visitors.includes("yuria"));
   s.metrics[0]=12;
-  G.nextWeek(s,true);
+  waitForGuest(s,"shusai");
   assert.ok(s.visitors.includes("shusai") && !s.visitors.includes("yuria"));
   assert.throws(()=>G.scout(s,"shusai","premium"),/討伐/);
   s.history.push({wins:1,path:["gate"]});
+  assert.ok(G.scout(s,"shusai","premium"));
   s.metrics[0]=20;
-  G.nextWeek(s,true);
+  waitForGuest(s,"yuria");
   assert.throws(()=>G.scout(s,"yuria","premium"),/宿屋/);
   s.town.plots.brook="inn";
   s.metrics[1]=80;
+  assert.ok(G.scout(s,"yuria","premium"));
   for (const [id,skill] of [["shusai","iai"],["yuria","royalWard"]]) {
-    assert.ok(G.scout(s,id,"premium"));
     const p=G.person(s,id);
     assert.equal(p.skills[0],skill);
     assert.ok(G.actionList(p)[skill]);
     assert.ok(!G.startingJobs.includes(p.job));
-    assert.match(p.career.at(-1).message,/が仲間になった/);
+    assert.equal(p.career.filter(e => e.message.includes("が仲間になった")).length,1);
   }
   assert.equal(s.milestones.length,2);
   G.configure(s,["shusai","yuria"],"yuria","safe",0);

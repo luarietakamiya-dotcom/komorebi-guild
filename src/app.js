@@ -25,7 +25,7 @@ const urgent = () => g.emergencyParty(state);
 const who = id => g.knownPerson(state, id);
 const assetUrl = id => `assets/${id}.webp`;
 const asset = (id, cls = "", alt = "") => `<img src="${assetUrl(id)}" class="${cls}" alt="${esc(alt)}">`;
-const portrait = (p, cls = "") => `<img class="avatar ${cls}" alt="${esc(p.name)}" src="${esc(p.portrait || assetUrl(g.jobs[p.job].face))}">`;
+const portrait = (p, cls = "") => `<img class="avatar ${cls}" alt="${esc(p.name)}" src="${esc((!p.useJobPortrait && p.portrait) || assetUrl(g.characterArt(p).portrait))}">`;
 const action = (id, label, cls = "btn", attrs = "") => `<button type="button" class="${cls}" data-action="${id}" ${attrs}>${label}</button>`;
 const tag = (txt, cls = "") => `<span class="tag ${cls}">${txt}</span>`;
 const title = (symbol, txt, end = "") => `<div class="section-title"><h2>${icon(symbol,23)}${txt}</h2>${end}</div>`;
@@ -160,14 +160,20 @@ function morningControls() {
     ${resting && !g.anyAway(state) ? action("next","休暇を終えて翌週へ") : ""}
     ${plan ? `<p>${esc(plan.message)} ${action("hold","今週の自動判断を止める","text-btn",`data-party="${state.selectedParty}"`)}</p>` : ""}</div>`;
 }
+function specialVisitLetters(thisWeekOnly) {
+  const letters = state.morningMail.filter(n => n.specialVisit && (!thisWeekOnly || n.week === state.week));
+  if (!letters.length) return "";
+  return `<section class="special-visits"><h3>${icon("mail",17)} 特別な来訪</h3>
+    ${letters.map(n => `<p><b>第${n.week}週 ・ ${esc(n.sender)}</b><br>${esc(n.message)}</p>`).join("")}</section>`;
+}
 function morningLetters(thisWeekOnly) {
   const plans = g.morningPlans(state);
-  const notices = state.morningMail.filter(n => !thisWeekOnly || n.week === state.week);
+  const notices = state.morningMail.filter(n => !n.specialVisit && (!thisWeekOnly || n.week === state.week));
   if (!plans.length && !notices.length) return "";
   return `<section class="morning-mail"><h3>${icon("mail",17)} 週初めの伝書</h3>${plans.map(({team,message}) =>
-    `<p><b>${teamName(team)}</b>　${esc(message)} ${action("hold","今週の自動判断を止める","text-btn",`data-party="${g.partyNumber(state,team)}"`)}</p>`).join("")}
+    `<p>${who(team.leader) ? portrait(who(team.leader),"mail-face") : ""}<b>${teamName(team)}</b>　${esc(message)} ${action("hold","今週の自動判断を止める","text-btn",`data-party="${g.partyNumber(state,team)}"`)}</p>`).join("")}
     ${plans.length ? '<small>週初めの支度は標準で12秒です。判断を止めると、その週は手動で指示できます。</small>' : ""}
-    ${notices.map(n => `<p><small>第${n.week}週 ・ ${teamName(teams()[n.partyNumber-1])}</small>　${esc(n.message)}</p>`).join("")}</section>`;
+    ${notices.map(n => `<p><small>第${n.week}週 ・ ${n.sender ? esc(n.sender) : teamName(teams()[n.partyNumber-1])}</small>　${esc(n.message)}</p>`).join("")}</section>`;
 }
 function lifeStatus(p) {
   return `死亡 ${p.deaths}/${g.deathThreshold(state)}回` + (p.deaths >= g.deathThreshold(state)-1 ? "（次は永久消失）" : "") +
@@ -199,14 +205,14 @@ function mailbox() {
   const records = [...teams().filter(t => t.phase === "explore").map(t => ({
     ...t.trip, partyNumber:g.partyNumber(state,t) })), ...state.history];
   const archive = records.flatMap(r => r.log.filter(e => e.letter?.answer).map(e =>
-    `<li><b>第${e.letter.answeredWeek ?? r.week}週 ・ ${teamBadge(teams()[r.partyNumber - 1])}</b>　${esc(e.letter.senderName ?? who(r.leader)?.name)}<p>${esc(e.letter.line)}</p><small>${esc(e.letter.decision || "返信済み")} ・ ${choiceLabel(e.letter.answer,r)}</small></li>`));
+    `<li>${who(r.leader) ? portrait(who(r.leader),"mail-face") : ""}<b>第${e.letter.answeredWeek ?? r.week}週 ・ ${teamBadge(teams()[r.partyNumber - 1])}</b>　${esc(e.letter.senderName ?? who(r.leader)?.name)}<p>${esc(e.letter.line)}</p><small>${esc(e.letter.decision || "返信済み")} ・ ${choiceLabel(e.letter.answer,r)}</small></li>`));
   const archiveTitle = records.some(r => r.log.some(e => e.letter?.decision)) ? "通信履歴" : "返信済み";
   const promotions = state.milestones.filter(e => e.guildGrade);
   const guildMail = promotions.length ? `<section class="panel padded">${title("mail","ギルド昇格の伝書")}
     ${promotions.map(e => `<p><small>第${e.week}週</small>　${esc(e.message)}</p>`).join("")}</section>` : "";
   return pageTitle("GUILD MAIL","伝書箱","隊から届いた相談に返信できます。") +
     (pending.join("") || '<p class="fine">返信を待っている隊はありません。</p>') +
-    teams().map(rescueNotice).join("") + guildMail + raidBulletin() + morningLetters(false) +
+    teams().map(rescueNotice).join("") + guildMail + raidBulletin() + specialVisitLetters(false) + morningLetters(false) +
     (pending.length ? waitUntilNextWeek() : "") +
     (archive.length ? `<details class="rules"><summary>${archiveTitle}（${archive.length}件）</summary><ul>${archive.join("")}</ul></details>` : "");
 }
@@ -274,7 +280,7 @@ function familyPanel() {
   function childRow(p) {
     const inTown = state.children.includes(p), adult = p.age >= g.species[p.species].adult;
     const status = inTown ? g.childStage(p) : departed(p) || "所属冒険者";
-    return `<li><b>${esc(p.name)}</b> ・ ${ageLabel(p)} ・ ${status}
+    return `<li data-person="${esc(p.id)}"><b>${esc(p.name)}</b> ・ ${ageLabel(p)} ・ ${status}
       ${inTown ? `<small>${inheritanceText(p)} ・ ${g.species[p.species].adult}歳から入団</small>` : ""}
       ${inTown && adult ? action("enlist-child","ギルドに迎える","btn",`data-id="${esc(p.id)}" ${g.weekStarted(state) ? "disabled" : ""}`) : ""}</li>`;
   }
@@ -294,7 +300,7 @@ function roster() {
     const owner = teams().find(team => team.party.includes(p.id));
     const unit = owner?.trip?.unit.find(u=>u.id===p.id);
     const status = visitor?"雇用候補":p.leaveWeek === state.week?"休暇中":unit && owner.phase==="report" ? (unit.injury || unit.state==="severe"?"療養予定":"帰還") :unit && unit.state!=="ok" ? names[unit.state] :resting?"療養中":owner?teamName(owner)+(owner.phase==="explore"?"・遠征中":"・編成中"):"控え";
-    return `<article class="panel roster-card">${tag(status,visitor?"gold":resting?"rose":"mint")}${portrait(p)}
+    return `<article class="panel roster-card" data-person="${esc(p.id)}">${tag(status,visitor?"gold":resting?"rose":"mint")}${portrait(p)}
       <h2>${esc(g.formalName(p))}</h2><p>${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p><p>${ageLabel(p)}</p><p>階級　${esc(g.rankName(state,p))}</p>
       <div class="character-stats"><span>HP <b>${g.outfittedStat(state,p,"hp")}</b></span><span>攻 <b>${g.outfittedStat(state,p,"atk")}</b></span><span>防 <b>${g.outfittedStat(state,p,"def")}</b></span><span>速 <b>${g.outfittedStat(state,p,"spd")}</b></span></div>
       <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && g.fitWeek(p)>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+g.fitWeek(p)+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
@@ -320,9 +326,10 @@ function examPanel(p) {
 let guestId, guestOffer;
 function visitorBoard() {
   const visitors = g.visitorList(state), market = state.market;
-  return `<section class="panel padded guest-board">${title("team","一般冒険者",cap("名声 "+g.fame(state)))}
+  const ordered = visitors.filter(p => g.uniqueGuests[p.id]).concat(visitors.filter(p => !g.uniqueGuests[p.id]));
+  return `<section class="panel padded guest-board">${title("team","今週の来訪者",cap("名声 "+g.fame(state)))}
     <p class="fine">複数のギルドで仕事をする冒険者です。週の前半はホールで会えます。専属契約を結ぶと所属冒険者として編成できます。週後半は一般冒険者向けの継続依頼に出発します。</p>
-    <div class="guest-list">${visitors.map(p=>action("guest",portrait(p)+`<span><b>${esc(p.name)}</b><small>${g.jobs[p.job].name} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
+    <div class="guest-list">${ordered.map(p=>action("guest",portrait(p)+`<span><b>${g.uniqueGuests[p.id] ? "特別な来訪 ・ " : ""}${esc(p.name)}</b><small>${g.jobs[p.job].name} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
       <small>${p.mission ? g.dungeons[p.mission.dungeon].name+"で「"+g.quests[p.mission.quest].name+"」を受注中" : "ホールに滞在中"}</small></span>`,"btn",`data-id="${p.id}"`)).join("") || "今週の来訪者はいません。"}</div>
     <details><summary>訪問のうわさ</summary>${state.registry.filter(p=>g.uniqueGuests[p.id]).map(p=>`<p>${g.jobs[p.job].name}${esc(p.name)}（${ageLabel(p)}）　${g.uniqueGuests[p.id].invitation}</p>`).join("")}</details>
     ${market.returns.length || market.gold ? `<details><summary>町に届いた分け前</summary>
@@ -335,10 +342,11 @@ function guestDetail() {
   const status = g.scoutStatus(state,p,guestOffer);
   const unique = g.uniqueGuests[p.id];
   return modalHead("team",esc(p.name)+"の登録票")+`<div class="character-detail"><section>
-    ${portrait(p)}<p>一般冒険者 ・ ${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p>
+    ${portrait(p)}<p>${unique ? "特別な来訪者" : "一般冒険者"} ・ ${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p>
     <p>${esc(p.backstory || "他のギルドの仕事も引き受け、町を行き来している。")}</p>
     <p>得意技　${p.skills.map(id=>g.abilities[id].name).join("・")}</p></section>
     <section><h3>専属契約の交渉</h3><p>この町で終えた依頼 ${p.contacts || 0}件 ・ ギルドの信用 ${state.metrics[1]}</p>
+    ${status.negotiation ? `<p>タナカが交渉に同席しています（評価 ＋${status.negotiation}）。</p>` : ""}
     ${unique ? `<p>${unique.invitation}</p>` : ""}
     <label>提示する条件<select id="guest-offer">${Object.entries(g.offers).map(([id,o])=>
       `<option value="${id}" ${id===guestOffer?"selected":""}>${o.name} ${o.gold}G</option>`).join("")}</select></label>
@@ -455,7 +463,8 @@ function characterNameFields(p = {}) {
 function characterDetail() {
   const p = who(characterId);
   return modalHead("book",esc(g.formalName(p))+"の人物手帳") +
-    `<div class="character-detail"><form id="character-names">${characterNameFields(p)}<button type="submit" class="btn">愛称・二つ名を保存</button></form>
+    `<div class="character-detail"><div class="character-identity">${portrait(p)}${p.id === "custom" ?
+      action("appearance","職業・外見を編集","btn",g.awayMember(state,p.id) ? "disabled" : "") : ""}</div><form id="character-names">${characterNameFields(p)}<button type="submit" class="btn">愛称・二つ名を保存</button></form>
     ${action("gambits","戦術オーダーを編集（"+p.gambits.length+" / 10）","btn",`data-id="${p.id}"`)}<section><label>過去・生い立ち<textarea data-note="backstory" rows="3" placeholder="出身や、ギルドを訪れた理由">
 ${esc(p.backstory)}</textarea></label>
     <label>手書きメモ<textarea data-note="memo" rows="2" placeholder="覚えておきたい出来事">
@@ -513,7 +522,15 @@ function stockPanel() {
 }
 let activeShop = null, shopView = "orders", recipeId, finishId, buyerNumber = 0;
 const buyer = () => teams()[buyerNumber-1] || null;
-const shopSite = id => g.territoryPlots.find(p => p.id === id)?.name || "ギルド併設";
+function shopSite(id) {
+  const plot = g.plotForSite(id);
+  if (!plot) return "ギルド併設";
+  return plot.name + (g.plotCapacity(plot,state.town.plots) > 1 ? "（"+(plot.sites.indexOf(id)+1)+"軒目）" : "");
+}
+function buildingName(site) {
+  const shop = state.town.workshops[site];
+  return shop ? g.shopTypes[shop.type].name : g.buildings[state.town.plots[site]].name;
+}
 const materialName = type => g.items[type.material]?.name || "畑の食料";
 const effectText = effects => Object.entries(effects).map(([key,value]) => g.effectNames[key] + signed(value)).join(" ／ ");
 const shopStock = type => g.materialAvailable(state,type.material);
@@ -531,7 +548,7 @@ function shops() {
       return action("open-shop", asset("scenery_"+type.building) +
         `<span><small>${shopSite(id)}</small><strong>${type.name}</strong>${g.artisanName(shop)} ・ ${g.shopRanks[shop.level-1]}</span>${tag(state.town.repairs[id] || (id==="hall" && state.town.smithReadyWeek>state.week) ? "休業中" : "Lv."+shop.level,"gold")}`,
         "shop-card", `data-id="${id}"`);
-    }).join("") + '</div><p class="fine">空き地に鍛冶屋・専門商店・酒場を建てると、店が増えます。同じ業種でも区画ごとに育ちます。</p>' + stockPanel();
+    }).join("") + '</div><p class="fine">空き地に鍛冶屋・専門商店・酒場を建てると、店が増えます。同じ業種でも一軒ずつ育ちます。</p>' + stockPanel();
 }
 function shopTree(shop, type) {
   function nodeCard(node) {
@@ -599,7 +616,7 @@ function shopPanel() {
     <div class="forge-intro">${asset(activeShop==="hall"?"toto":"scenery_"+type.building,"smith")}
     <div><small>${shopSite(activeShop)} ・ 店 Lv.${shop.level}</small><h2>${type.name}</h2>
     <b>${g.shopRanks[shop.level-1]}の${g.artisanName(shop)}</b><p>「${type.lines[shop.level-1]}」</p>
-    ${activeShop!=="hall" ? `<small>${buildingEffect(type.building,g.territoryPlots.find(p=>p.id===activeShop),shop)}</small>` : ""}</div></div>
+    ${activeShop!=="hall" ? `<small>${buildingEffect(type.building,g.plotForSite(activeShop),shop)}</small>` : ""}</div></div>
     <section class="shop-training"><div><b>工房の技術継承 ・ ${shop.lineage.generation}代目</b>
     <p>${g.species[shop.lineage.species].name} ・ 職人 ${shop.lineage.age}歳 ／ 見習い ${shop.lineage.apprenticeAge}歳（修業${shop.lineage.apprenticeYears}年・実習${shop.lineage.lessons}/6）</p>
     <small>営業4年ごとに加工品の品質と主効果＋1（上限＋8、現在＋${g.craftBonus(shop)}）。見習いは4年で継承の準備が整います。納品・加工で実習が6に達すると3年に短縮されます。代替わり後も店の技・品質を受け継ぎます。</small></div></section>
@@ -633,17 +650,33 @@ function journalPage() {
 function townPeople() {
   const villagers = [...state.roster.filter(p => !g.awayMember(state, p.id)), ...state.alumni.filter(p => p.departure.kind === "retired")];
   if (!who("shion")) villagers.push(g.recruit(state));
-  return [...villagers.map(p => ({ id: p.id, voice:p, sprite: g.jobs[p.job].face, name: g.familiarName(p), role: p.departure ? "引退した"+g.jobs[p.job].name : g.jobs[p.job].name })),
-    ...state.children.map(p => ({id:p.id,voice:p,growing:true,name:g.familiarName(p),sprite:g.jobs[p.job].face,
+  return [...villagers.map(p => ({ id: p.id, voice:p, sprite: g.characterArt(p).stack, name: g.familiarName(p), role: p.departure ? "引退した"+g.jobs[p.job].name : g.jobs[p.job].name })),
+    ...state.children.map(p => ({id:p.id,voice:p,growing:true,name:g.familiarName(p),sprite:g.characterArt(p).stack,
       role:g.childStage(p)+" ・ "+p.age+"歳",scale:.5+.5*Math.min(1,p.age/g.species[p.species].adult)})),
     { id: "toto", voice:{trait:"kind",pronoun:"おいら",tone:"casual"}, sprite: "toto", name: g.artisanName(state.town.workshops.hall), role: "鍛冶屋 ・ "+g.shopRanks[state.town.workshops.hall.level-1] }];
 }
+function selectTownPerson(id) {
+  if (id === "toto") return openShop("hall");
+  if (g.visitorList(state).some(p=>p.id===id)) {
+    guestId = id;
+    guestOffer = "basic";
+    return showModal("guest");
+  }
+  const resident = who(id);
+  if (resident) {
+    characterId = id;
+    return showModal(resident.departure ? "resident-family" : "character");
+  }
+  navigate("roster");
+  if (state.children.some(p=>p.id===id)) $("#family-panel").open = true;
+  $(`#management [data-person="${CSS.escape(id)}"]`)?.scrollIntoView({block:"nearest"});
+}
 function expeditionPeople(t) {
   return [t.unit.find(u => u.id === t.leader), ...t.unit.filter(u => u.id !== t.leader)]
-    .map(u => ({ ...u, name:g.familiarName(who(u.id)), voice:who(u.id), maxHP:g.outfittedStat(state,who(u.id),"hp"), sprite: g.jobs[who(u.id).job].face }));
+    .map(u => ({ ...u, name:g.familiarName(who(u.id)), voice:who(u.id), maxHP:g.outfittedStat(state,who(u.id),"hp"), sprite: g.characterArt(who(u.id)).stack }));
 }
 const townViewKey = "komorebi-town-view";
-let townStep = 0, townCamera = GuildVoxel.townCamera(townStep);
+let townZoom = 1, townStep = 0, townCamera = GuildVoxel.townCamera(townStep);
 try {
   const savedView = JSON.parse(localStorage.getItem(townViewKey));
   if (Number.isInteger(savedView?.step)) {
@@ -661,7 +694,7 @@ function markerPosition(id) {
     return `left:${100*x/view.width}%;top:${100*y/view.height}%`;
   }
   const site = id === "hall" ? GuildVoxelMaps.hallSite :
-    GuildVoxel.projectGround(...GuildVoxelMaps.plotCenter(g.territoryPlots.find(p=>p.id===id)),0,view);
+    GuildVoxel.projectGround(...GuildVoxelMaps.plotCenter(g.allPlots.find(p=>p.id===id)),0,view);
   const [x,y] = townCamera ? townCamera.project(...site) : site;
   return `left:${100*x/view.width}%;top:${100*y/view.height}%`;
 }
@@ -678,9 +711,16 @@ function changeTownView(stack,delta=0) {
   for (const button of controls.querySelectorAll("[data-action=town-mode]"))
     button.setAttribute("aria-pressed",String(stack === (button.dataset.id === "stack")));
   for (const button of controls.querySelectorAll("[data-action=town-turn]")) button.disabled = !stack;
-  controls.querySelector("output").textContent = stack ? townStep*360/GuildVoxel.directions+"°" : "固定";
+  controls.querySelector(".town-turns output").textContent = stack ? townStep*360/GuildVoxel.directions+"°" : "固定";
   try { localStorage.setItem(townViewKey,JSON.stringify({mode:stack ? "stack" : "paint",step:townStep})); }
   catch { /* Keep the current view for this session. */ }
+}
+function updateTownZoom(value) {
+  townZoom = value;
+  const controls = $(".town-zoom");
+  controls.querySelector("output").textContent = Math.round(value*100)+"%";
+  controls.querySelector('[data-id="-1"]').disabled = value <= 1;
+  controls.querySelector('[data-id="1"]').disabled = value >= GuildScenery.maxTownZoom;
 }
 function townViewControls() {
   return `<div class="town-view-controls" role="group" aria-label="町の表示">
@@ -689,7 +729,11 @@ function townViewControls() {
     <div class="town-turns" role="group" aria-label="視点の回転">
     ${action("town-turn","↶","btn",`data-id="-1" aria-label="左に回転" ${townCamera?"":"disabled"}`)}
     <output>${townCamera ? townStep*360/GuildVoxel.directions+"°" : "固定"}</output>
-    ${action("town-turn","↷","btn",`data-id="1" aria-label="右に回転" ${townCamera?"":"disabled"}`)}</div></div>`;
+    ${action("town-turn","↷","btn",`data-id="1" aria-label="右に回転" ${townCamera?"":"disabled"}`)}</div>
+    <div class="town-zoom" role="group" aria-label="町のズーム">
+    ${action("town-zoom","−","btn",`data-id="-1" aria-label="町を縮小" ${townZoom<=1?"disabled":""}`)}
+    <output>${Math.round(townZoom*100)}%</output>
+    ${action("town-zoom","＋","btn",`data-id="1" aria-label="町を拡大" ${townZoom>=GuildScenery.maxTownZoom?"disabled":""}`)}</div></div>`;
 }
 function plotMarkers() {
   const hallDamage = state.town.repairs.hall;
@@ -698,21 +742,24 @@ function plotMarkers() {
   const hill = g.landmarks[state.town.landmark];
   const hillMarker = action("plot",hill?.name || "見晴らしの丘 ・ 建築","plot-marker hill-marker",
     `data-id="hill" aria-haspopup="dialog" aria-expanded="false" style="${markerPosition("hill")}"`);
-  return hallMarker + hillMarker + g.territoryPlots.map(plot => {
-    const building = g.buildings[state.town.plots[plot.id]];
-    const shop = state.town.workshops[plot.id];
-    const name = shop ? g.shopTypes[shop.type].name : building?.name || "空き地";
-    const controls = shop ? 'aria-controls="management"' : 'aria-haspopup="dialog" aria-expanded="false"';
-    const job = state.town.repairs[plot.id];
-    const status = job ? (job.remaining ? " ・ 修理中" : " ・ 損傷") : "";
-    return action("plot", plot.name+" ・ "+name+status, "plot-marker"+(plot.road ? " outer-plot" : "")+(building ? " developed" : "")+(job ? " damaged" : ""),
-      `data-id="${plot.id}" ${controls} aria-label="${plot.name}、${name}${status}、${plot.size**2}タイル" style="${markerPosition(plot.id)}"`);
+  return hallMarker + hillMarker + g.allPlots.map(plot => {
+    const occupied = plot.sites.filter(site => state.town.plots[site]);
+    const name = occupied.map(site => {
+      const job = state.town.repairs[site];
+      return buildingName(site)+(job ? (job.remaining ? " ・ 修理中" : " ・ 損傷") : "");
+    }).join("・") || "空き地";
+    const capacity = g.plotCapacity(plot,state.town.plots);
+    const capacityText = "容量 "+occupied.length+"/"+capacity;
+    const controls = capacity === 1 && state.town.workshops[plot.id] ? 'aria-controls="management"' : 'aria-haspopup="dialog" aria-expanded="false"';
+    const damaged = occupied.some(site => state.town.repairs[site]);
+    return action("plot", plot.name+" ・ "+name+" ・ "+capacityText, "plot-marker"+(plot.defenseOnly ? " defense-spot" : "")+(plot.road ? " outer-plot" : "")+(occupied.length ? " developed" : "")+(damaged ? " damaged" : ""),
+      `data-id="${plot.id}" ${controls} aria-label="${plot.name}、${name}、${plot.size**2}タイル、${capacityText}" style="${markerPosition(plot.id)}"`);
   }).join("");
 }
 function panorama(kind, label) {
   const town = kind === "town";
   const {width,height} = town ? GuildVoxel.views.town : {width:900,height:300};
-  return `<div class="panorama-scroll ${kind}-scroll" ${town ? `data-mode="${townCamera ? "stack" : "paint"}" tabindex="0" role="region" aria-label="街の区画図。横にスクロールできます"` : ""}>
+  return `<div class="panorama-scroll ${kind}-scroll" ${town ? `data-mode="${townCamera ? "stack" : "paint"}" style="--town-zoom:${townZoom}" tabindex="0" role="region" aria-label="町の区画図。拡大中はドラッグまたは矢印キーで移動できます"` : ""}>
     <div class="panorama"><canvas width="${width}" height="${height}" data-scene="${kind}" role="img" aria-label="${esc(label)}"></canvas><div class="scene-bubble" hidden><b></b><span></span></div>${town ? plotMarkers() : ""}</div></div>`;
 }
 function sceneHead(symbol, section, name, detail) {
@@ -720,8 +767,7 @@ function sceneHead(symbol, section, name, detail) {
 }
 function siteName(id) {
   if (id==="hall") return "ギルドホール";
-  const shop = state.town.workshops[id];
-  return shopSite(id)+"の"+(shop ? g.shopTypes[shop.type].name : g.buildings[state.town.plots[id]].name);
+  return shopSite(id)+"の"+buildingName(id);
 }
 function repairStatus(id) {
   const job = state.town.repairs[id];
@@ -729,12 +775,67 @@ function repairStatus(id) {
   if (job.remaining) return '<p class="repair-job">修理中 ・ あと'+job.remaining+'週'+(job.delayed ? "（追加工事）" : "")+'</p>';
   const q = g.repairQuote(state,id);
   return '<div class="repair-job"><p>損傷のため休止中 ・ '+(q.local ? "町の職人" : "外部の職人")+
-    'が担当。工期 '+q.weeks+'週、予定通りに仕上がる確率 '+Math.round(100*q.chance)+'％。</p>'+
-    action("repair","修理を発注 ・ "+q.cost+" G","btn",`data-id="${id}" ${g.guildGold(state)<q.cost ? "disabled" : ""}`)+'</div>';
+    'が担当。工期 '+q.weeks+'週、予定通りに仕上がる確率 '+Math.round(100*q.chance)+'％。'+(q.subsidy ? "交易会館の修理資金から "+q.subsidy+" G 補助。" : "")+'</p>'+
+    action("repair","修理を発注 ・ "+q.cost+" G","btn",`data-id="${id}" ${g.guildGold(state)<q.cost || state.town.defenses[id] && state.raids.active ? "disabled" : ""}`)+'</div>';
+}
+function guardAssignments(plan) {
+  if (!plan.routeVersion) return "";
+  const defenders = g.raidDefenders(state);
+  return '<fieldset class="guard-assignments"><legend>守備配置</legend><p>持ち場を指定した隊員とその隊は、自動出発を見合わせます。広場を突破されると町が被害を受けます。</p>'+
+    defenders.map((p,i)=>{
+      const selected = plan.assignments?.[p.id] || "auto";
+      const choices = {auto:"自動",...g.guardPosts};
+      return '<label>'+esc(p.name)+'<select data-guard="'+esc(p.id)+'">'+Object.entries(choices).map(([id,name])=>
+        '<option value="'+id+'" '+(id===selected ? "selected" : "")+'>'+name+(id==="auto" ? "（"+g.guardPosts[g.guardPost({...plan,assignments:{}},p,i).key]+"）" : "")+'</option>').join("")+'</select></label>';
+    }).join("")+(defenders.length ? "" : "<p>現在、町で守備につける冒険者はいません。</p>")+'</fieldset>';
+}
+function raidContributions(r) {
+  const rows = Object.values(r.contributions || {}).filter(v=>v.damage || v.delay || v.support || v.lastAction);
+  return rows.map(v=>'<span class="raid-contribution"><b>'+esc(v.name)+'</b>（'+esc(v.post)+'） '+
+    [v.damage && v.damage+"ダメージ",v.kills && v.kills+"体討伐",v.delay && v.delay+"拍足止め",v.support && "支援"+v.support+"回",v.lastAction && esc(v.lastAction)].filter(Boolean).join(" ・ ")+'</span>').join("");
+}
+function defenseDescription(spec) {
+  return spec.effect+" ／ 射程 "+spec.range+" ／ "+(spec.power ? "威力 "+spec.power+" ・ "+spec.interval+"拍ごと" : spec.delay+"拍足止め");
+}
+function rangeDiagram(site,kind) {
+  const spec = g.defenseStats(state,site,kind);
+  const [x,y] = g.defenseCenter(site,{...state.town.plots,[site]:kind});
+  const radius = spec.range, width = radius*3, height = radius*1.36;
+  const paths = [], terrain = [];
+  let nearestStop, nearestDistance = Infinity;
+  for (const road of Object.values(g.territoryRoads)) {
+    paths.push('<polyline points="'+road.map(([x,y])=>x+','+y).join(" ")+'"/>');
+    for (const p of road) {
+      if (g.terrainAt(p)) terrain.push('<circle cx="'+p[0]+'" cy="'+p[1]+'" r="4"/>');
+      const distance = Math.hypot(p[0]-x,2*(p[1]-y));
+      if (distance<nearestDistance) { nearestStop=p; nearestDistance=distance; }
+    }
+  }
+  const splash = spec.splash && nearestDistance<=radius ? '<ellipse cx="'+nearestStop[0]+'" cy="'+nearestStop[1]+'" rx="'+spec.splash+'" ry="'+spec.splash/2+'" fill="#8574ba35" stroke="#8166a3" stroke-dasharray="4 3"/>' : "";
+  return '<svg class="range-diagram" role="img" aria-label="'+g.buildings[kind].name+'の射程と周辺街道" viewBox="'+[x-width/2,y-height/2,width,height].join(" ")+'"><g fill="none" stroke="#a48a65" stroke-width="4">'+paths.join("")+'</g><ellipse cx="'+x+'" cy="'+y+'" rx="'+radius+'" ry="'+radius/2+'" fill="#578b6926" stroke="#387157" stroke-width="2"/>'+splash+'<g fill="#a5722d">'+terrain.join("")+'</g><circle cx="'+x+'" cy="'+y+'" r="5" fill="#28573d"/></svg>'+
+    '<small>緑の楕円は射程、茶線は街道、金の点は橋・隘路。要点では威力＋2または足止め＋1拍。'+(splash ? "紫の楕円は街道に着弾した場合の攻撃範囲。" : "")+'</small>';
+}
+function defensePreview(site,kind) {
+  const spec = g.defenseStats(state,site,kind);
+  return '<p>'+defenseDescription(spec)+'</p>'+rangeDiagram(site,kind);
+}
+function defensePanel(site,kind) {
+  const spec = g.defenseStats(state,site), funds = g.guildGold(state);
+  const disabled = !!state.town.repairs[site] || !!state.raids.active;
+  const upgrade = spec.upgradeCost ? action("upgrade-defense","Lv."+(spec.level+1)+"へ強化 ・ "+spec.upgradeCost+" G","btn",
+    'data-id="'+site+'" '+(disabled || spec.upgradeCost>funds ? "disabled" : "")) : "最大レベル";
+  const maintenance = !disabled && spec.hp<spec.maxHP ? action("repair","修理を発注 ・ "+g.repairQuote(state,site).cost+" G","btn",
+    'data-id="'+site+'" '+(g.repairQuote(state,site).cost>funds ? "disabled" : "")) : "";
+  return '<section class="defense-panel"><b>Lv.'+spec.level+'　耐久 '+spec.hp+' / '+spec.maxHP+'</b>'+defensePreview(site,kind)+
+    '<p>'+upgrade+' '+maintenance+'</p><h4>追加装備（1枠・付け替え可）</h4><div class="defense-options">'+spec.options.map(id=>{
+      const opt = g.defenseOptions[id];
+      return action("equip-defense",opt.name+(spec.option===id ? " ・ 装備中" : " ・ "+opt.cost+" G")+'<small>'+opt.effect+'</small>',"catalog-item",
+        'data-id="'+site+'" data-option="'+id+'" '+(disabled || spec.option===id || funds<opt.cost ? "disabled" : ""));
+    }).join("")+'</div></section>';
 }
 function raidReport(r) {
   const losses = r.damaged.length ? r.damaged.map(id=>esc(siteName(id))).join("・")+"が損傷" : "建物の被害なし";
-  return `第${r.week}週 ・ ${g.roadNames[r.road]}の${r.surprise ? "奇襲" : "襲撃"}　${r.repelled ? "撃退" : "防衛戦終了"}（討伐 ${r.ore}/${r.count}体）${r.knights ? " ・ 騎士団派遣" : ""}<br>${losses}。略奪 ${r.gold} G・食料 ${r.food}、満足度 −${r.discontent}。${r.injured.length ? "負傷："+r.injured.map(esc).join("・")+"。" : ""} 工房用の倉庫へ鉱石 ${r.ore}・薬草 ${r.herb}。信用 ＋${r.credit}。`;
+  return `第${r.week}週 ・ ${g.roadNames[r.road]}の${r.surprise ? "奇襲" : "襲撃"}　${r.repelled ? "撃退" : "防衛戦終了"}（討伐 ${r.ore}/${r.count}体）${r.knights ? " ・ 騎士団派遣" : ""}<br>${losses}。略奪 ${r.gold} G・食料 ${r.food}、満足度 −${r.discontent}。${r.injured.length ? "負傷："+r.injured.map(esc).join("・")+"。" : ""} 工房用の倉庫へ鉱石 ${r.ore}・薬草 ${r.herb}。信用 ＋${r.credit}。${r.subsidy ? "交易会館から修理資金 "+r.subsidy+" G。" : ""}${raidContributions(r)}`;
 }
 function raidDays() {
   const warning = state.raids.warning;
@@ -742,11 +843,11 @@ function raidDays() {
 }
 function raidBulletin() {
   const {warning,active} = state.raids;
-  if (warning) return `<section class="raid-bulletin">${title("mail",warning.observed ? "天文台の襲撃予報" : "斥候からの伝書")}<p>第${warning.dueWeek ?? state.week}週、<b class="raid-days">${raidDays()}</b>日後に${g.roadNames[warning.road]}から襲撃の兆し。${warning.observed ? `敵は${warning.count}体。ヌシ${warning.boss ? "あり" : "なし"}。` : `斥候の見立ては約${warning.count}体です。`}${warning.outer ? "立体地形図で" + g.outerPlots.filter(p=>p.road===warning.road).map(p=>p.name).join("・") + "に防衛施設を建てると、町に入る前に迎撃できます。" : ""}</p><div class="actions">${teams().filter(team=>team.phase==="prep" && team.decisionWeek!==state.week && team.party.length).map(team=>action("hold",teamName(team)+"を町に残す","btn",`data-party="${g.partyNumber(state,team)}"`)).join("")}</div></section>`;
+  if (warning) return `<section class="raid-bulletin">${title("mail",warning.observed ? "天文台の襲撃予報" : "斥候からの伝書")}<p>第${warning.dueWeek ?? state.week}週、<b class="raid-days">${raidDays()}</b>日後に${g.roadNames[warning.road]}から襲撃の兆し。${warning.observed ? `敵は${warning.count}体。ヌシ${warning.boss ? "あり" : "なし"}。` : `斥候の見立ては約${warning.count}体です。`}${warning.outer ? "立体地形図で" + g.defenseSpots.filter(p=>p.road===warning.road).map(p=>p.name).join("・") + "などの防衛専用地を選べます。" : ""}</p>${guardAssignments(warning)}<div class="actions">${teams().filter(team=>team.phase==="prep" && team.decisionWeek!==state.week && team.party.length).map(team=>action("hold",teamName(team)+"を町に残す","btn",`data-party="${g.partyNumber(state,team)}"`)).join("")}</div></section>`;
   if (!active) return "";
   const fallen = active.enemies.filter(e=>!e.hp).length;
   const defenders = g.raidDefenders(state);
-  return `<section class="raid-bulletin">${title("shield",g.roadNames[active.road]+(active.surprise ? "から奇襲" : "で迎撃中"))}<p>討伐 ${fallen} / ${active.count}体 ・ 町の守り手 ${defenders.map(p=>esc(p.name)).join("・") || "なし"}${active.knights ? " ・ 城の騎士団が参戦" : ""}${active.boss ? " ・ ヌシ出現" : ""}</p><div class="actions">${teams().filter(t=>t.phase==="explore" && !t.trip.rescue).map(t=>action("raid-recall",teamName(t)+"を緊急帰還","btn",`data-id="${g.partyNumber(state,t)}"`)).join("")}</div></section>`;
+  return `<section class="raid-bulletin">${title("shield",g.roadNames[active.road]+(active.surprise ? "から奇襲" : "で迎撃中"))}<p>討伐 ${fallen} / ${active.count}体 ・ 町の守り手 ${defenders.map(p=>esc(p.name)).join("・") || "なし"}${active.knights ? " ・ 城の騎士団が参戦" : ""}${active.boss ? " ・ ヌシ出現" : ""}</p>${active.routeVersion===2 ? defenders.map((p,i)=>esc(p.name)+" → "+g.guardPosts[g.guardPost(active,p,i).key]).join(" ／ ") + raidContributions(active) : ""}<div class="actions">${teams().filter(t=>t.phase==="explore" && !t.trip.rescue).map(t=>action("raid-recall",teamName(t)+"を緊急帰還","btn",`data-id="${g.partyNumber(state,t)}"`)).join("")}</div></section>`;
 }
 function raidAftermath() {
   const jobs = Object.keys(state.town.repairs);
@@ -765,15 +866,16 @@ function townRaidScene() {
 function townView(people) {
   const totals = g.townTotals(state.town);
   const omen = state.town.landmark === "observatory" ? `<p class="raid-bulletin"><b>今週の星読み ・ ${g.luckyWeek(state.week) ? "吉" : "凶"}</b>　${g.luckyWeek(state.week) ? "深層の罠は静かです。宝箱では星図の導きで鉱石をもう1個拾えます。" : "深層の罠が活発です。星図を携えた隊は罠を感知できます。"}</p>` : "";
-  return raidBulletin() + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空き地を選ぶと建築できます。")}
-    <figcaption>${icon("map",17)} 石畳に沿った空き地を選んで建築 <span>外周の街道と防衛区画は立体地形で確認できます。</span></figcaption></figure>
+  return raidBulletin() + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
+    <figcaption>${icon("map",17)} 空きのある区画を選んで建築 <span>拡大中はドラッグで移動できます。外周の街道と防衛区画は立体地形で確認できます。</span></figcaption></figure>
     <dl class="town-ledger">
-      <div><dt>${icon("home",16)} 領地の建築済み区画</dt><dd>${Object.keys(state.town.plots).length}<small> / ${g.territoryPlots.length} 区画</small></dd></div>
+      <div><dt>${icon("home",16)} 通常区画の建築数</dt><dd>${g.territoryPlots.filter(plot=>state.town.plots[plot.id]).length}<small> / ${g.territoryPlots.length} 区画</small></dd></div>
+      <div><dt>${icon("flag",16)} 防衛専用地</dt><dd>${g.defenseSpots.filter(p=>state.town.plots[p.id]).length}<small> / ${g.defenseSpots.length} か所</small></dd></div>
       <div><dt>${icon("shield",16)} 防衛値</dt><dd>${totals.defense}</dd></div>
       <div><dt>${icon("sprout",16)} 食料ストック</dt><dd>${state.town.food}<small>（＋${totals.food} / 週）</small></dd></div>
       <div><dt>${icon("coin",16)} 施設収入</dt><dd>${totals.income}<small> G / 週</small></dd></div>
-    </dl>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの一般冒険者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","一般冒険者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
-    <ul>${people.map(p => `<li>${asset(g.uniqueGuests[p.id] ? p.sprite : "px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
+    </dl>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
+    <ul>${people.map(p => `<li>${(p.voice.hair || p.voice.portrait) ? portrait(p.voice,"resident-portrait") : asset(g.uniqueGuests[p.id] ? p.sprite : "px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
 }
 
 function sceneChatterRate(kind) {
@@ -786,11 +888,12 @@ function sceneChatterRate(kind) {
 let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
   const people = townPeople();
-  const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.jobs[p.job].face,name:g.familiarName(p),voice:p})));
+  const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.characterArt(p).stack,name:g.familiarName(p),voice:p})));
   const repairs = Object.entries(state.town.repairs).map(([id,job])=>[id,job.remaining>0]);
-  const layout = JSON.stringify([state.town.plots,state.town.landmark,repairs,walkers.map(p=>[p.id,p.sprite,p.name,p.scale])]);
+  const built = GuildVoxelMaps.townAppearances(state.town);
+  const layout = JSON.stringify([built,state.town.landmark,repairs,walkers.map(p=>[p.id,p.sprite,p.name,p.scale])]);
   const previous = townScene;
-  const scroll = previous?.viewport.scrollLeft;
+  const scroll = previous && [previous.viewport.scrollLeft, previous.viewport.scrollTop];
   const featsOpen = $("#guild-feats")?.open;
   const familyOpen = $("#family-panel")?.open;
   const inventoryOpen = $("#party-inventory")?.open;
@@ -821,9 +924,9 @@ function render() {
     } else {
       previous?.stop();
       townScene = {layout,emblem,viewport,stop:GuildScenery.mount(canvas,
-        {people:walkers,chatterRate:sceneChatterRate,camera:townCamera,turn:delta=>changeTownView(true,delta),url:assetUrl,time:worldSeconds,raidScene:townRaidScene,built:state.town.plots,landmark:state.town.landmark,emblem,selectPlot,activePlot,openHall:()=>navigate("hall")})};
+        {people:walkers,chatterRate:sceneChatterRate,camera:townCamera,zoom:townZoom,zoomChanged:updateTownZoom,selectPerson:selectTownPerson,turn:delta=>changeTownView(true,delta),url:assetUrl,time:worldSeconds,raidScene:townRaidScene,built,landmark:state.town.landmark,emblem,selectPlot,activePlot,ranges:plot=>plot.sites?.filter(site=>state.town.defenses[site]).map(site=>({center:g.defenseCenter(site,state.town.plots),range:g.defenseStats(state,site).range})) || [],openHall:()=>navigate("hall")})};
     }
-    if (scroll !== undefined) townScene.viewport.scrollLeft = scroll;
+    if (scroll) townScene.viewport.scrollTo(...scroll);
     if (page==="hall" && selected().phase==="explore") {
       stopDungeon = GuildScenery.mount($('canvas[data-scene="dungeon"]'),
         {people:expeditionPeople(selected().trip),chatterRate:sceneChatterRate,trip:selected().trip,url:assetUrl,fraction:stepFraction});
@@ -1127,12 +1230,12 @@ function activePlot() {
   if (modal === "plot") return selectedPlot;
   const button = document.activeElement;
   if (button?.dataset.action === "plot" && button.matches(":focus-visible"))
-    return button.dataset.id === "hill" ? GuildVoxelMaps.hillPlot : g.territoryPlots.find(plot => plot.id === button.dataset.id);
+    return button.dataset.id === "hill" ? GuildVoxelMaps.hillPlot : g.allPlots.find(plot => plot.id === button.dataset.id);
 }
 function selectPlot(id) {
-  selectedPlot = id === "hill" ? GuildVoxelMaps.hillPlot : g.territoryPlots.find(plot => plot.id === id);
+  selectedPlot = id === "hill" ? GuildVoxelMaps.hillPlot : g.allPlots.find(plot => plot.id === id);
   if (selectedPlot && (!selectedPlot.road || townCamera)) {
-    if (state.town.workshops[id]) return openShop(id);
+    if (state.town.workshops[id] && g.plotCapacity(selectedPlot,state.town.plots) === 1) return openShop(id);
     $(`[data-action="plot"][data-id="${id}"]`).ariaExpanded = "true";
     showModal("plot");
   }
@@ -1141,8 +1244,9 @@ function productionText(shop) {
   const type = g.shopTypes[shop.type];
   return `${materialName(type)}を加工（${type.recipes[0].name}など・店 Lv.${shop.level}）`;
 }
-function buildingEffect(kind, plot, shop) {
+function buildingEffect(kind, plot, shop, site) {
   const effects = g.facilityEffects(kind,plot,shop);
+  if (effects.defense && site) effects.defense *= state.town.defenses[site]?.level || 1;
   const lines = Object.entries(effects).map(([key,n]) => g.facilityEffectText[key](n));
   if (shop) lines.push(productionText(shop));
   return lines.join(" ／ ");
@@ -1151,13 +1255,12 @@ function facilityList() {
   const town = state.town;
   const stopped = town.repairs.hall || town.smithReadyWeek > state.week;
   const rows = [`<li><b>ギルド併設の鍛冶屋${stopped ? "（休業中）" : ""}</b><br>${productionText(town.workshops.hall)}</li>`];
-  for (const plot of g.territoryPlots) {
-    const kind = town.plots[plot.id];
-    if (!kind) continue;
-    const shop = town.workshops[plot.id];
+  for (const [site,kind] of Object.entries(town.plots)) {
+    const plot = g.plotForSite(site);
+    const shop = town.workshops[site];
     const name = kind === "tavern" ? "酒場（食べ物屋）" : shop ? g.shopTypes[shop.type].name : g.buildings[kind].name;
-    const status = town.repairs[plot.id] ? " ・ 損傷のため効果休止中" : "";
-    rows.push(`<li><b>${plot.name}の${name}${status}</b><br>${buildingEffect(kind,plot,shop)}</li>`);
+    const status = town.repairs[site] ? " ・ 損傷のため効果休止中" : "";
+    rows.push(`<li><b>${shopSite(site)}の${name}${status}</b><br>${buildingEffect(kind,plot,shop,site)}</li>`);
   }
   const landmark = g.landmarks[town.landmark];
   if (landmark) rows.push(`<li><b>見晴らしの丘の${landmark.name}</b><br>${landmark.effect}</li>`);
@@ -1167,7 +1270,7 @@ function hillPanel() {
   const kind = state.town.landmark, current = g.landmarks[kind], price = g.landmarkPrice(state);
   const choices = Object.entries(g.landmarks).filter(([id])=>id !== kind).map(([id,b]) =>
     action("build-landmark",`<i class="landmark-stamp" aria-hidden="true" style="background-image:url('${assetUrl("turn_"+id)}')"></i><strong>${b.name}</strong><small>${b.effect}</small>`,
-      "catalog-item landmark-choice",`data-id="${id}" ${g.guildGold(state)<price ? "disabled" : ""}`)).join("");
+      "catalog-item landmark-choice",`data-id="${id}" ${state.raids.active || g.guildGold(state)<price ? "disabled" : ""}`)).join("");
   let service = "";
   if (kind === "cathedral") {
     const patients = state.roster.filter(p=>Object.keys(p.debuffs).length);
@@ -1184,26 +1287,34 @@ function hillPanel() {
 }
 function plotPanel(plot) {
   if (plot.id === "hill") return hillPanel();
-  const built = g.buildings[state.town.plots[plot.id]];
-  const heading = modalHead("map",plot.name) +
-    `<div class="plot-meta">${tag(plot.size+" × "+plot.size+" タイル","mint")}<span>${plot.road ? g.roadNames[plot.road]+"沿い ・ " : ""}${built ? built.group : "空き地"} ・ ${plot.size**2} タイル</span></div>`;
-  if (built && state.town.repairs[plot.id]) return heading + `<h3>${built.name}</h3>` + repairStatus(plot.id);
-  if (built) return heading + `<h3 class="plot-name">${built.name}</h3><p>${buildingEffect(state.town.plots[plot.id],plot)}</p>`;
+  const occupied = plot.sites.filter(site => state.town.plots[site]);
+  const capacity = g.plotCapacity(plot,state.town.plots);
+  const heading = modalHead("map",plot.name+(plot.defenseOnly ? " ・ 防衛専用地" : "")) +
+    `<div class="plot-meta">${tag("容量 "+occupied.length+"/"+capacity,"mint")}<span>${plot.road ? g.roadNames[plot.road]+"沿い ・ " : ""}${plot.size} × ${plot.size} タイル ・ 空き ${capacity-occupied.length}軒</span></div>` +
+    occupied.map((site,i) => {
+      const shop = state.town.workshops[site];
+      const name = (capacity > 1 ? (i+1)+"軒目 ・ " : "")+buildingName(site);
+      const effect = state.town.repairs[site] ? repairStatus(site) : `<p>${buildingEffect(state.town.plots[site],plot,shop,site)}</p>`;
+      return `<h3 class="plot-name">${name}</h3>${effect}` + (state.town.defenses[site] ? defensePanel(site,state.town.plots[site]) : "") + (shop ? action("open-shop","店を開く","btn",`data-id="${site}"`) : "");
+    }).join("");
+  if (occupied.length === capacity) return heading;
   const groups = new Map();
   for (const [id,building] of Object.entries(g.buildings)) {
+    if (plot.defenseOnly && !building.defense) continue;
     if (!groups.has(building.group)) groups.set(building.group,[]);
     const price = g.townPrice(plot,building);
-    let choice = action("build",
+    let choice = action(occupied.length ? "build-addition" : "build",
       `<strong>${id==="shop" ? "選んだ専門商店を建築" : id==="tavern" ? "酒場（食べ物屋）" : building.name}</strong><span>${price} G</span><small>${buildingEffect(id,plot)}</small>`,
-      "catalog-item", `data-id="${id}" ${g.guildGold(state) < price ? "disabled" : ""}`);
+      "catalog-item", `data-id="${id}" ${g.guildGold(state) < price || building.defense && state.raids.active ? "disabled" : ""}`);
     if (id === "shop") {
       const specialties = Object.fromEntries(Object.entries(g.shopTypes).filter(([,t])=>t.building==="shop"));
       choice = `<div class="shop-build"><label>商店の専門<select id="build-specialty">${options(specialties)}</select></label>${choice}</div>`;
     }
     groups.get(building.group).push(choice);
   }
-  return heading + `<div class="catalog-heading"><h3>建築カタログ</h3><span>所持金　${money(g.guildGold(state))}</span></div>
+  return heading + `<div class="catalog-heading"><h3>${occupied.length ? "2軒目の建築カタログ" : "建築カタログ"}</h3><span>所持金　${money(g.guildGold(state))}</span></div>
     <p class="fine">施設を選ぶと、表示額を支払ってこの区画に建築します。</p>` +
+    '<section class="defense-panel"><label>防衛施設の射程を確認 <select id="preview-kind">'+Object.keys(g.defenseTypes).map(id=>'<option value="'+id+'">'+g.buildings[id].name+'</option>').join("")+'</select></label><div id="defense-preview">'+defensePreview(plot.sites[occupied.length],"watch")+'</div></section>'+
     Array.from(groups, ([group,items])=>`<section class="catalog-group"><h4>${group}</h4><div>${items.join("")}</div></section>`).join("");
 }
 function showModal(type) {
@@ -1232,7 +1343,14 @@ function drawModal() {
   }
   if(modal==="plot") body.innerHTML=plotPanel(selectedPlot);
   if(modal==="prepare") body.innerHTML=prepForm();
-  if(modal==="create") body.innerHTML=createForm();
+  if(modal==="create") {
+    body.innerHTML=createForm();
+    updatePreview();
+  }
+  if(modal==="appearance") {
+    body.innerHTML=appearanceForm(who("custom"));
+    updateEditPreview();
+  }
   if(modal==="guest") body.innerHTML=guestDetail();
   if(modal==="character") body.innerHTML=characterDetail();
   if(modal==="resident-family") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の交友")+relationshipPanel(who(characterId));
@@ -1265,7 +1383,7 @@ function prepForm() {
     ${action("depart",state.town.repairs.hall ? "ギルドホールの修理待ち" : icon("flag",18)+" この編成で出発する","primary wide",canDepart&&!g.claimed(state,selected().quest,selected())&&g.expeditionFunds(state,selected())>=quote.food+quote.medicine?"":"disabled")}
     <div class="prep-footer">${action("keep-party","編成を保存","text-btn",draft.party.length?"":"disabled")}${action("manage","名簿で雇用・登録","text-btn")}${action("work","遠征を休んで町を手伝う","text-btn",g.weekStarted(state)?"disabled":"")}</div>`;
 }
-function options(obj) { return Object.entries(obj).map(([k,v])=>`<option value="${k}">${esc(v.name || v)}</option>`).join(""); }
+function options(obj,selected) { return Object.entries(obj).map(([k,v])=>`<option value="${k}"${k===selected ? " selected" : ""}>${esc(v.name || v)}</option>`).join(""); }
 function initialSkillOptions(job) {
   return g.jobs[job].skills.map(id=>`<option value="${id}">${g.abilities[id].name}（${skillDescription(id)}）</option>`).join("");
 }
@@ -1273,29 +1391,66 @@ function creationAgeHint(id) {
   const r = g.species[id];
   return r.description+" 成人"+r.adult+"歳・寿命"+r.lifespan+"歳。"+(r.decline === null ? "加齢による衰えはありません。" : r.decline+"歳から衰えが始まります。");
 }
+function jobField(p, id) {
+  const choices = g.startingJobs.includes(p.job) ? g.startingJobs : [p.job];
+  const labels = Object.fromEntries(choices.map(job => [job,g.jobs[job].name]));
+  return `<label>職業<select name="job" id="${id}">${options(labels,p.job)}</select></label>`;
+}
+function appearanceFields(p, allowClassic = false) {
+  const colors = allowClassic ? {"":"従来の姿",...g.hairColors} : g.hairColors;
+  return `<div class="form-pair"><label>性別<select name="sex">${options({female:"女性",male:"男性",unspecified:"未指定"},p.sex)}</select></label>
+    <label>髪色<select name="hair">${options(colors,p.hair || "")}</select></label></div>`;
+}
+function appearanceForm(p) {
+  return modalHead("team","職業・外見を編集")+`<form id="appearance-editor">${jobField(p,"appearance-job")}${appearanceFields(p,true)}
+    ${p.portrait ? `<label><input type="checkbox" name="useJobPortrait" ${p.useJobPortrait ? "checked" : ""}>登録した顔画像の代わりに職業の顔絵を使う</label>` : ""}
+    <div id="appearance-preview"></div><button class="primary wide" type="submit">変更を保存</button>
+    ${action("character","人物手帳に戻る","btn", 'data-id="custom"')}</form>`;
+}
+function readAppearanceForm(form) {
+  if (form.elements?.hair) {
+    form.elements.hair.disabled = !g.variantJob(form.elements.job.value) || form.elements.sex.value === "unspecified";
+  }
+  return Object.fromEntries(new FormData(form));
+}
+function updateEditPreview() {
+  const form = $("#appearance-editor");
+  const p = {...who("custom"),...readAppearanceForm(form)};
+  p.useJobPortrait = !!form.elements?.useJobPortrait?.checked;
+  drawAppearancePreview(p,$("#appearance-preview"));
+}
+function drawAppearancePreview(p,host,caption = "") {
+  const stack = g.characterArt(p).stack;
+  host.innerHTML = `<div class="appearance-preview">${portrait(p)}<canvas width="64" height="50" aria-label="町と遠征での姿"></canvas>${caption}</div>`;
+  const canvas = host.querySelector("canvas");
+  if (canvas) GuildStacks.preview(canvas,stack,assetUrl).catch(() => {
+    if (canvas.isConnected) canvas.replaceWith("歩行モデルを読み込めませんでした。");
+  });
+}
 function createForm() {
   return modalHead("team","自作冒険者の登録")+`<form id="creator"><p class="fine">1人を無料で登録できます。年長者は経験と技能を持って入団します。若いほど遠征で得る経験値が多くなります。</p>
-    <label>名前<input name="name" maxlength="8" required placeholder="冒険者の名前"></label>${characterNameFields()}<div class="form-pair"><label>職業<select name="job" id="creator-job">${g.startingJobs.map(id=>`<option value="${id}">${g.jobs[id].name}</option>`).join("")}</select></label><label>性格<select name="trait">${options(g.traits)}</select></label></div>
+    <label>名前<input name="name" maxlength="8" required placeholder="冒険者の名前"></label>${characterNameFields()}<div class="form-pair">${jobField({job:"sword"},"creator-job")}<label>性格<select name="trait">${options(g.traits)}</select></label></div>
     <div class="form-pair"><label>種族<select name="species" id="creator-species">${options(g.species)}</select></label>
     <label>年齢（歳）<input name="age" id="creator-age" type="number" step="1" min="${g.species.human.adult}" max="${g.species.human.lifespan-1}" value="${g.species.human.adult}" required></label></div>
     <small id="creator-aging">${creationAgeHint("human")}</small>
-    <label>性別<select name="sex">${options({unspecified:"未指定",female:"女性",male:"男性"})}</select></label>
+    ${appearanceFields({sex:"female",hair:"gold"})}
     <label>初期スキル<select name="initialSkill" id="initial-skill">${initialSkillOptions(g.startingJobs[0])}</select></label>
     <label>過去・生い立ち（任意）<textarea name="backstory" rows="3" placeholder="ギルドを訪れた理由など"></textarea></label>
     <div class="form-pair"><label>一人称<input name="pronoun" value="私" maxlength="12"></label><label>マスターの呼び方<input name="master" value="マスター" maxlength="16"></label></div>
     <div class="form-pair"><label>話し方<select name="tone">${options({polite:"丁寧",normal:"普通",casual:"くだけた",rough:"乱暴"})}</select></label><label>語尾（任意）<input name="ending" maxlength="12" placeholder="例：ですわ"></label></div>
     <label>顔画像（任意）<input type="file" id="portrait-file" accept="image/png,image/jpeg,image/webp"></label><p class="fine">PNG・JPEG・WebP。名簿と通信に同じ顔が表示されます。</p>
-    <div id="voice-preview"></div><button class="primary wide" type="submit">名簿に登録する</button></form>`;
+    <div id="creator-appearance"></div><div id="voice-preview"></div><button class="primary wide" type="submit">名簿に登録する</button></form>`;
 }
 function updatePreview() {
   const form=$("#creator"); if(!form) return;
-  const p=Object.fromEntries(new FormData(form)); p.pronoun ||= "私"; p.master ||= "マスター"; p.portrait=customImage;
+  const p=readAppearanceForm(form); p.pronoun ||= "私"; p.master ||= "マスター"; p.portrait=customImage;
   const friend = state.roster[0] ? g.familiarName(state.roster[0]) : "仲間";
   const race = p.species || "human", r = g.species[race], age = Number(p.age ?? r.adult);
   const training = g.entryTraining(p.job,race,age,p.initialSkill);
   const summary = Number.isInteger(age) && age >= r.adult && age < r.lifespan ?
     `<p>入団時　Lv.${training.level} ・ 経験値 ${training.xp} ・ ${training.skills.map(id=>g.abilities[id].name).join("、")}</p>` : "";
-  $("#voice-preview").innerHTML=`${summary}<div class="speech">${portrait(p)}<div><b>通信のプレビュー</b><p>「${esc(g.speak(p,"crisis",friend))}」</p></div></div>`;
+  $("#voice-preview").innerHTML=summary;
+  drawAppearancePreview(p,$("#creator-appearance"),`<div><b>通信のプレビュー</b><p>「${esc(g.speak(p,"crisis",friend))}」</p></div>`);
 }
 async function squareImage(file, size) {
   if (!["image/png","image/jpeg","image/webp"].includes(file.type)) throw Error("PNG・JPEG・WebPを選んでください。");
@@ -1363,9 +1518,13 @@ document.addEventListener("click",event=>{
   try {
     switch(cmd) {
       case "town-mode": changeTownView(id==="stack"); return;
+      case "town-zoom": townScene.stop.setZoom(townZoom + Number(id)*.25); return;
       case "town-turn": changeTownView(true,Number(id)); return;
       case "nav": navigate(id); return;
       case "close-drawer": closeDrawer(); return;
+      case "appearance":
+        if (characterId === "custom" && !g.awayMember(state,characterId)) showModal("appearance");
+        return;
       case "gambits": characterId = id; showModal("gambits"); return;
       case "rule-add": case "rule-remove": case "rule-up": case "rule-down": case "rule-preset":
         if (modal === "gambits") editRule(cmd,id);
@@ -1461,21 +1620,21 @@ document.addEventListener("click",event=>{
         if (modal !== "character") return;
         g.treatDebuff(state,characterId,id,cmd==="fit-limb");
         break;
-      case "build": {
+      case "build": case "build-addition": {
         if (modal !== "plot" || !$("#dialog").open) return;
-        g.build(state,selectedPlot.id,id,id==="shop" ? $("#build-specialty").value : undefined);
+        const site = selectedPlot.sites[cmd === "build" ? 0 : 1];
+        g.build(state,site,id,id==="shop" ? $("#build-specialty").value : undefined);
         const scroll = $(".town-scroll").scrollLeft;
         closeModal(); save(); render();
         $(".town-scroll").scrollLeft = scroll;
         $(`[data-action="plot"][data-id="${selectedPlot.id}"]`).focus({preventScroll:true});
-        const shop = state.town.workshops[selectedPlot.id];
-        toast(selectedPlot.name+"に"+(shop ? g.shopTypes[shop.type].name : g.buildings[id].name)+"ができました。");
+        toast(selectedPlot.name+"に"+buildingName(site)+"ができました。");
         return;
       }
       case "close": closeModal(); return;
       case "help": case "work": case "prepare": case "create":
         if ((cmd === "prepare" && selected().phase !== "prep") || (cmd === "create" && g.weekStarted(state))) return;
-        showModal(cmd); if(cmd==="create")updatePreview(); return;
+        showModal(cmd); return;
       case "manage": closeModal(); navigate("roster"); return;
       case "quest": g.setQuest(state,id,selected()); break;
       case "hire": g.hire(state); toast("シオンが名簿に加わりました。編成で起用できます。"); break;
@@ -1492,6 +1651,9 @@ document.addEventListener("click",event=>{
         break;
       case "raid-recall":
         g.raidRecall(state,teams()[Number(id)-1]); surfaceEmergency(); break;
+      case "upgrade-defense": case "equip-defense":
+        g.improveDefense(state,id,cmd==="equip-defense" ? button.dataset.option : undefined);
+        drawModal(); break;
       case "repair":
         g.startRepair(state,id);
         if (modal==="plot") drawModal();
@@ -1519,6 +1681,18 @@ document.addEventListener("click",event=>{
 });
 document.addEventListener("change",event=>{
   const el=event.target;
+  if (el.form?.id === "appearance-editor") { updateEditPreview(); return; }
+  if (el.form?.id === "creator" && ["sex","hair"].includes(el.name)) { updatePreview(); return; }
+  if (el.id === "preview-kind") {
+    const site = selectedPlot.sites.find(id=>!state.town.plots[id]);
+    $("#defense-preview").innerHTML = defensePreview(site,el.value);
+    return;
+  }
+  if (el.dataset?.guard) {
+    try { g.assignGuard(state,el.dataset.guard,el.value); save(); render(); }
+    catch (error) { toast(error.message); }
+    return;
+  }
   if (el.id === "guest-offer") {
     guestOffer=el.value; drawModal(); $("#guest-offer").focus(); return;
   }
@@ -1620,9 +1794,19 @@ document.addEventListener("input",e=>{
   if (e.target.closest(".emblem-controls")) {
     updateEmblem(e.target.form);
   }
-  if(e.target.closest("#creator"))updatePreview();
+  if(e.target.closest("#creator") && e.target.tagName !== "SELECT")updatePreview();
+  if(e.target.form?.id === "creator" && ["trait","tone","initialSkill"].includes(e.target.name)) updatePreview();
 });
 document.addEventListener("submit",event=>{
+  if (event.target.id === "appearance-editor") {
+    event.preventDefault();
+    if (modal !== "appearance" || characterId !== "custom") return;
+    try {
+      g.editCustomAppearance(state,Object.fromEntries(new FormData(event.target)));
+      save(); render(); showModal("character"); toast(saveWarning || "職業と外見を保存しました。");
+    } catch (error) { toast(error.message); }
+    return;
+  }
   if (event.target.id === "character-names") {
     event.preventDefault();
     const p = g.person(state,characterId);

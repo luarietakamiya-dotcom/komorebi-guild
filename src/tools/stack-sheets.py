@@ -13,7 +13,8 @@ from PIL import Image
 GAME = Path(__file__).resolve().parents[1]
 SIZE = 32
 COLUMNS = 8
-LAYERS = dict(shusai=32, yuria=32, mina=32, shion=32, gald=32, toto=32, popo=32, boar=24)
+LAYERS = dict(shusai=32, yuria=32, riina=32, yukina=32, jobava=32, tanaka=32, shiina=32, goto=32,
+              mina=32, shion=32, gald=32, toto=32, popo=32, boar=24)
 
 # Shadow, midtone and sunlit swatches sampled visually from the guild portraits.
 SWATCHES = {
@@ -204,6 +205,106 @@ def yuria(v):
     v.twig((-6, 1, 9), (-9, 2, 2), 1.15, .7, "iron")
 
 
+def riina(v):
+    body(v, "navy", "navy")
+    v.coat(9, 11, (6.1, 4.5), (5.8, 4.4), "red")
+    v.oval((0, 0, 16), (5.8, 4.4, 2.2), "teal")
+    v.twig((-3, -2, 16), (-7, -7, 11), 1.8, 1, "teal")
+    face(v, "ink", "ink")
+    # A high ribbon-tied ponytail trails behind the scarf.
+    v.oval((1, -5.3, 28.8), (2.6, 2.5, 2.8), "red")
+    v.twig((1, -7, 29.2), (4.5, -9, 24), 2.8, 2.4, "ink")
+    v.twig((4.5, -9, 24), (5.8, -8, 17), 2.4, .9, "ink")
+    v.twig((1, -5.8, 29), (-3, -8, 26), 1.2, .7, "red")
+    # Ivory prayer slip with a vermilion seal, held in front of her hand.
+    slip = (abs(v.x-6.6) < 1.55) & (abs(v.y-3.6) < .9) & (v.z >= 9) & (v.z <= 15)
+    v.paint(slip, "linen", .75)
+    v.paint(slip & (v.z >= 12) & (v.z <= 13), "red", .2)
+
+
+def yukina(v):
+    body(v, "linen", "linen")
+    # Pleated hakama, crossed collar and wide white sleeves.
+    v.coat(2, 11, (6.8, 4.6), (4.7, 3.9), "red")
+    for side in (-1, 1):
+        v.twig((side*1.7, 3.7, 10), (side*3.7, 3.9, 2.2), .85, .75, "copper")
+        v.oval((side*6.2, .5, 12), (2.9, 3.3, 3.6), "linen")
+    v.twig((-2.5, 2.7, 16), (2.6, 3.9, 11.4), .8, .7, "red")
+    v.coat(10, 11, (5.6, 4.5), (5.4, 4.4), "copper")
+    v.oval((0, -5.3, 18), (5.3, 2.6, 10), "ink")
+    face(v, "ink", "ink")
+    for side in (-1, 1):
+        v.oval((side*2.2, -5.7, 29), (2.8, 1.6, 2.8), "red", tilt=side)
+        v.twig((side, -6, 29), (side*5.2, -7, 22), 1.5, 1, "copper")
+    # Gohei with two zigzag paper streamers visible beside her hair.
+    v.twig((6, 3.1, 7), (10, 2.3, 25), .95, .85, "hide")
+    for x, y, z in [(10, 2.3, 25), (9.8, 4.8, 22)]:
+        v.twig((x, y, z), (x+1.7, y, z-2), 1, 1, "linen")
+        v.twig((x+1.7, y, z-2), (x+.7, y, z-3.4), 1, 1, "linen")
+        v.twig((x+.7, y, z-3.4), (x+2.5, y, z-5.5), 1, .75, "linen")
+
+
+def jobava(v):
+    body(v, "gold", "iron")
+    cape(v, "red", "gold", True)
+    for side in (-1, 1):
+        v.oval((side*5.3, 0, 14.5), (3.1, 3.7, 2.8), "gold")
+    face(v, "ink", "ink")
+    v.oval((0, 3.9, 19.3), (5.9, 2.5, 2.9), "ink", v.z < 19.8 + abs(v.x)*.32)
+    v.oval((0, -.4, 26.5), (8.2, 7.1, 1.6), "gold")
+    for x, y in [(-5, 4), (0, 5.4), (5, 4), (-4, -5), (4, -5)]:
+        v.twig((x, y, 26.5), (x*1.15, y*1.12, 31 if x == 0 else 30), 1.7, .9, "gold")
+    v.oval((0, 6, 27.1), (1.4, 1, 1.6), "red")
+
+
+def tanaka(v):
+    body(v, "navy", "navy")
+    v.oval((0, 3.3, 13.7), (3.1, 1.4, 3), "linen")
+    v.twig((0, 4.1, 15.3), (0, 4.5, 10.5), .9, 1.25, "red")
+    # Leather document case with handle and brass clasp.
+    v.oval((6.7, 2, 7.8), (2.1, 1.2, 1.8), "hide")
+    case = (abs(v.x-6.7) < 3.5) & (abs(v.y-2) < 1.65) & (v.z >= 2) & (v.z <= 7)
+    v.paint(case, "leather", .15*v.z-.6)
+    v.paint(case & (abs(v.x-6.7) < 1) & (v.z == 6), "gold", .8)
+    face(v, "ink", "ink")
+    v.twig((-3, -1, 28.8), (2.7, .8, 30.8), 1.9, 1.2, "ink")
+    for side in (-1, 1):
+        for z in (21, 24):
+            v.twig((side*1.1, 6.6, z), (side*5.1, 5.6, z), .68, .72, "iron")
+        for x, y in [(1.1, 6.6), (5.1, 5.6)]:
+            v.twig((side*x, y, 21), (side*x, y, 24), .72, .72, "iron")
+    v.twig((-1.1, 6.6, 23), (1.1, 6.6, 23), .7, .7, "iron")
+
+
+def shiina(v):
+    body(v, "teal", "linen")
+    v.coat(5, 11, (7.2, 5.1), (4.5, 3.7), "teal")
+    v.coat(5, 6, (7.3, 5.2), (7, 5.1), "linen")
+    v.oval((0, 3.8, 14.2), (1.9, 1, 2), "gold")
+    face(v, "plum", "lilac")
+    for side in (-1, 1):
+        v.oval((side*6.5, -3.6, 27.7), (2.2, 2.1, 2.4), "red")
+        v.oval((side*8.3, -4.5, 23), (2.8, 2.7, 6.6), "lilac", tilt=-side)
+        v.twig((side*7, -3, 28), (side*9.3, -4, 30.5), 1.2, 1.3, "copper")
+    v.twig((6.5, 2.5, 8), (8.8, 4.3, 15), .85, 1, "iron")
+    v.oval((9, 4.6, 16), (1.75, 1.8, 2), "gold")
+
+
+def goto(v):
+    body(v, "linen", "linen")
+    v.coat(4, 13, (6.3, 4.6), (4.6, 4), "forest", v.y > -.8)
+    v.oval((0, .3, 16), (4.7, 3.8, 1.6), "red")
+    v.twig((2, 3.2, 16), (3.3, 4.2, 12.7), 1.2, .9, "copper")
+    face(v, "leather", "leather")
+    for side in (-1, 1):
+        v.twig((side*.7, 6.3, 20.3), (side*3.3, 5.7, 19.7), .95, .85, "leather")
+    v.coat(25, 28, (7.5, 6.4), (7.1, 6.1), "linen")
+    for x, y in [(-4, -1), (4, -1), (0, -3.1), (0, 2)]:
+        v.oval((x, y, 29), (4.5, 4.2, 2.9), "linen")
+    v.twig((6.6, 2.4, 8.3), (9.4, 2.8, 18), .9, .95, "hide")
+    v.oval((9.8, 3, 19.5), (2.1, 1.3, 2.7), "ochre")
+
+
 def shion(v):
     body(v, "leather", "forest")
     cape(v, "forest", "sage", True)
@@ -309,11 +410,13 @@ def boar(v):
         flower(v,x,y,z)
 
 
-AUTHORS = dict(shusai=shusai, yuria=yuria, mina=mina, shion=shion, gald=gald, toto=toto, popo=popo, boar=boar)
+AUTHORS = dict(shusai=shusai, yuria=yuria, riina=riina, yukina=yukina, jobava=jobava, tanaka=tanaka,
+               shiina=shiina, goto=goto, mina=mina, shion=shion, gald=gald, toto=toto, popo=popo, boar=boar)
 
 
-def split(name, path):
-    count = LAYERS[name]
+def split(name, path, count=None):
+    if count is None:
+        count = LAYERS[name]
     out = GAME / "assets" / f"stack_{name}"
     out.mkdir(exist_ok=True)
     with Image.open(path) as sheet:

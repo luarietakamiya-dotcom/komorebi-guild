@@ -34,7 +34,7 @@ def layout():
       document:{createElement:()=>({getContext:()=>({})})}});
     for(const file of ['voxel.js','voxel-maps.js']) vm.runInContext(fs.readFileSync(file,'utf8'),c);
     const raw=vm.runInContext(`({lots:[...GuildVoxelMaps.clearings.values()].map(l=>l.edge),
-      outposts:Guild.outerPlots.map(p=>GuildVoxelMaps.territoryClearings.get(p.id).edge),
+      outposts:[...Guild.outerPlots,...Guild.defenseSpots].map(p=>GuildVoxelMaps.territoryClearings.get(p.id).edge),
       cameras:Array.from({length:GuildVoxel.directions},(_,i)=>GuildVoxel.townCamera(i)),
       view:GuildVoxel.views.town,roads:Object.values(GuildVoxelMaps.get('town').routes).map(r=>r.points.map(p=>
         GuildVoxel.projectGround(...p,0,GuildVoxel.views.town))), raids:[...Object.values(Guild.raidRoads),...Object.values(Guild.territoryRoads)]})`,c);

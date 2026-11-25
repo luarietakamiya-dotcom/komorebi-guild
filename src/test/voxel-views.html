@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>スプライトスタック景観の確認 ｜ 木もれびギルド</title>
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    body { display:block; padding: 18px clamp(12px, 3vw, 40px); }
+    main { max-width: 940px; margin: auto; }
+    h1 { font-size: 24px; }
+    section { margin: 16px 0; }
+    h2 { font-size: 18px; margin: 8px 0; }
+    .controls { display:flex; flex-wrap:wrap; align-items:center; gap:16px; padding:10px 14px; }
+    .controls label { display:flex; align-items:center; gap:8px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>スプライトスタック景観の確認</h1>
+    <section>
+      <h2>木もれびの里</h2>
+      <div class="scene-frame"><div class="panorama-scroll town-scroll"><div class="panorama">
+        <canvas width="1393" height="784" data-scene="town" role="img" aria-label="円形広場と石橋を巡る住人"></canvas>
+      </div></div></div>
+    </section>
+    <section>
+      <h2>苔むす森の洞</h2>
+      <div class="scene-frame"><div class="panorama-scroll dungeon-scroll"><div class="panorama">
+        <canvas width="900" height="300" data-scene="dungeon" role="img" aria-label="探索路に並ぶ遠征パーティー"></canvas>
+      </div></div>
+      <div class="controls">
+        <label>分岐 <select id="route"><option value="grove">採集路</option><option value="pass">岩場の近道</option></select></label>
+        <label>探索位置 <input id="position" type="range" min="0" max="400" value="170"></label>
+        <output id="location" for="route position"></output>
+      </div></div>
+    </section>
+  </main>
+  <script src="../engine.js"></script>
+  <script src="../stacks.js"></script>
+  <script src="../voxel.js"></script>
+  <script src="../voxel-maps.js"></script>
+  <script src="../scenery.js"></script>
+  <script>
+    const url = id => '../assets/' + id + '.webp';
+    const people = ['mina','gald','popo','shion','toto'].map(id => ({id, sprite:id, state:'ok'}));
+    const mount = (kind, options) => GuildScenery.mount(document.querySelector('[data-scene="'+kind+'"]'), options);
+    mount('town', {people, url});
+    const squad = Guild.initial().roster.map(p => ({id:p.id,sprite:p.id,state:'ok',hp:Guild.stat(p,'hp'),maxHP:Guild.stat(p,'hp')}));
+    const trip = {unit:squad}, route = document.querySelector('#route'), slider = document.querySelector('#position');
+    let fraction;
+    function positionParty() {
+      const rooms = ['gate','meadow','fork',...(route.value === 'pass' ? ['pass','vein'] : ['grove']),'home'];
+      slider.max = (rooms.length-1)*100;
+      const progress = Number(slider.value)/100;
+      trip.route = route.value;
+      trip.node = rooms[Math.floor(progress)];
+      fraction = progress % 1;
+      const fighting = Guild.nodes[trip.node].event === 'fight' && fraction < .34;
+      trip.fight = fighting ? {enemies:[{id:'enemy',kind:'boar',hp:3}]} : null;
+      trip.effects = fighting ? [{actor:'mina',target:'enemy',kind:'attack',amount:10}] : [];
+      document.querySelector('#location').textContent = Guild.nodes[trip.node].name;
+    }
+    route.addEventListener('change',positionParty);
+    slider.addEventListener('input',positionParty);
+    positionParty();
+    mount('dungeon', {people:squad, url, trip, fraction: () => fraction});
+  </script>
+</body>
+</html>

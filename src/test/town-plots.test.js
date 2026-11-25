@@ -30,7 +30,7 @@ test("どのサイズの空き地でも10種類から選び、費用を1回だ�
 
 test("区画面積で収穫し、遠征後も休養後も翌週に一度だけ生産する", () => {
   let s = G.initial();
-  s.gold = 2000;
+  s.gold = 10000;
   for (const [plot,kind] of Object.entries({square:"farm", brook:"farm", west:"forge",
     orchard:"shop", birch:"tavern", dawn:"inn", east:"school", mill:"bow", sunny:"magic", south:"wall", clover:"watch"}))
     G.build(s,plot,kind);
@@ -169,4 +169,63 @@ test("草地にポインターがある間だけ区画名を表示し、タッ�
   assert.deepEqual(picked,[G.plots[0].id]);
   stop();
   assert.equal(events.size,0);
+});
+
+test("二軒の敷地が収まる区画だけ増築できる。資金不足・不正な枠・満杯では支払わず、畑2軒は独立に収穫する", () => {
+  for (const plot of G.territoryPlots) {
+    const s = G.initial();
+    const tiles = plot.size ** 2, price = G.townPrice(plot,G.buildings.farm);
+    const [first,second] = plot.sites;
+    assert.equal(plot.sites.length,tiles >= 16 ? 2 : 1);
+    const capacity = ["orchard","brook","mill","clover"].includes(plot.id) ? 2 : 1;
+    assert.equal(G.plotCapacity(plot,s.town.plots),capacity);
+    s.gold = 2*price;
+    assert.throws(()=>G.build(s,plot.id+"-2","farm"));
+    G.build(s,first,"farm");
+    if (capacity === 2) {
+      s.gold--;
+      assert.throws(()=>G.build(s,second,"farm"));
+      assert.equal(s.gold,price-1);
+      s.gold++;
+      G.build(s,second,"farm");
+      assert.equal(s.gold,0);
+      G.nextWeek(s,true);
+      assert.equal(s.town.food,2*tiles);
+      s.town.repairs[first] = {remaining:1,chance:1};
+      assert.equal(G.townTotals(s.town).food,tiles);
+    }
+    s.gold = 3*price;
+    const snapshot = JSON.stringify(s);
+    for (const id of [first,plot.id+"-2",plot.id+"-3"]) assert.throws(()=>G.build(s,id,"farm"));
+    assert.equal(JSON.stringify(s),snapshot);
+  }
+});
+
+test("旧セーブの外周の同一区画で2つの塔がそれぞれ街道上の敵を迎撃する", () => {
+  const saved = G.initial(), plot = G.plotForSite("westBend");
+  saved.town.plots = {westBend:"watch","westBend-2":"bow"};
+  saved.town.outerTerritory = true;
+  const s = G.restore(JSON.parse(JSON.stringify(saved)));
+  assert.equal(G.plotCapacity(plot,s.town.plots),2);
+  s.raids.warning = {road:"west",outer:true,count:1,tier:2,due:100};
+  G.holdDeparture(s);
+  G.advanceTime(s,100);
+  const r = s.raids.active;
+  r.enemies[0].step = G.raidRoute(r).findIndex(stop => stop[2]===plot.id)-2;
+  const hp = r.enemies[0].hp;
+  G.advanceTime(s,G.raidBeat);
+  assert.deepEqual(r.hits.map(h=>h.source),plot.sites);
+  assert.equal(r.enemies[0].hp,hp-9);
+});
+
+test("容量が1軒に変わった区画でも旧セーブの2軒は独立して収穫できる", () => {
+  for (const id of ["wind","sunny"]) {
+    const plot = G.plotForSite(id), saved = G.initial();
+    for (const site of plot.sites) saved.town.plots[site] = "farm";
+    const s = G.restore(JSON.parse(JSON.stringify(saved)));
+    assert.equal(G.plotCapacity(plot,s.town.plots),2);
+    assert.deepEqual(s.town.plots,saved.town.plots);
+    G.nextWeek(s,true);
+    assert.equal(s.town.food,2*plot.size**2);
+  }
 });

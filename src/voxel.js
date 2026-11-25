@@ -47,8 +47,8 @@ const GuildVoxel = (() => {
     return cache.get(src);
   }
 
-  function stamp(id, url) {
-    const src = url("scenery_" + id);
+  function stamp(id, appearance, url) {
+    const src = url("scenery_" + appearance);
     if (!stamps.has(src)) stamps.set(src, image(src).then(sheet => {
       const rows = GuildSceneryMasks[id].split(".").map(row =>
         (row.match(/../g) || []).map(hex => parseInt(hex,16)));
@@ -72,11 +72,14 @@ const GuildVoxel = (() => {
     return ready;
   }
 
-  async function turnStamp(id,url,step) {
-    const canvas = await image(url("turn_"+id));
+  async function turnStamp(id,appearance,url,step) {
+    const canvas = await image(url("turn_"+appearance));
     const rows = GuildTownMasks[id][step].split(".").map(row =>
       (row.match(/../g) || []).map(hex=>parseInt(hex,16)));
-    const {width,height} = stampLayout;
+    // Atlas cells use the painting's native density. Destination and hit coordinates
+    // stay in the original logical frame at every camera angle.
+    const width = canvas.naturalWidth / 4 || stampLayout.width;
+    const height = canvas.naturalHeight / 4 || stampLayout.height;
     return {canvas,rows,crop:[step%4*width,Math.floor(step/4)*height,width,height]};
   }
 
@@ -102,13 +105,14 @@ const GuildVoxel = (() => {
     ctx.restore();
   }
 
-  function scene(kind, props, camera) {
+  function scene(kind, props, camera, pickProps = props) {
     const view = views[kind];
     const base = document.createElement("canvas");
     base.width = view.width;
     base.height = view.height;
     const ink = base.getContext("2d");
     props.sort((a,b) => a.depth-b.depth);
+    if (pickProps !== props) pickProps.sort((a,b) => a.depth-b.depth);
     const art = new Map();
     let preparing;
     function draw(ctx, actors, groundOverlay, guildFlag) {
@@ -116,9 +120,9 @@ const GuildVoxel = (() => {
       if (groundOverlay) groundOverlay(ctx);
       actors.sort((a,b) => a.depth-b.depth);
       let i = 0;
-      for (const {id, depth, x, y, scale, magnification = 1} of props) {
+      for (const {id, appearance = id, depth, x, y, scale, magnification = 1} of props) {
         while (i < actors.length && actors[i].depth < depth) actors[i++].paint(ctx);
-        const object = art.get(id);
+        const object = art.get(appearance);
         if (!object) continue;
         const size = scale*magnification;
         ctx.drawImage(object.canvas, ...(object.crop || []), x-stampLayout.pivot*size, y-stampLayout.ground*size,
@@ -131,9 +135,15 @@ const GuildVoxel = (() => {
 
     draw.prepare = url => {
       if (preparing) return preparing;
-      const ids = [...new Set(props.map(p => p.id))];
+      // Each shop illustration uses the picking mask of its saved building kind.
+      const kinds = new Map(props.map(p => [p.appearance ?? p.id, p.id]));
+      const appearances = [...kinds.keys()];
       preparing = Promise.all([camera ? terrainImage(camera.step,url) : image(url("ground_"+kind)),
-        ...ids.map(id => camera || !Object.hasOwn(GuildSceneryMasks,id) ? turnStamp(id,url,camera?.step ?? 0) : stamp(id,url))]).then(([ground,...objects]) => {
+        ...appearances.map(appearance => {
+          const id = kinds.get(appearance);
+          return camera || !Object.hasOwn(GuildSceneryMasks,id)
+            ? turnStamp(id,appearance,url,camera?.step ?? 0) : stamp(id,appearance,url);
+        })]).then(([ground,...objects]) => {
         ink.drawImage(ground, 0, 0, view.width, view.height);
         for (const {x,y,radius} of props) {
           // Three translucent ellipses soften the contact edge on grass and paving.
@@ -144,14 +154,14 @@ const GuildVoxel = (() => {
             ink.fill();
           }
         }
-        ids.forEach((id,i) => art.set(id,objects[i]));
+        appearances.forEach((key,i) => art.set(key,objects[i]));
       }).catch(error => { preparing = null; throw error; });
       return preparing;
     };
 
     draw.pickProp = (px,py) => {
-      for (let i=props.length-1; i>=0; i--) {
-        const item=props[i], object=art.get(item.id);
+      for (let i=pickProps.length-1; i>=0; i--) {
+        const item=pickProps[i], object=art.get(item.appearance ?? item.id);
         if (!object) continue;
         const x=Math.floor(((px-item.x)/item.scale+stampLayout.pivot)/2);
         const y=Math.floor(((py-item.y)/item.scale+stampLayout.ground)/2);

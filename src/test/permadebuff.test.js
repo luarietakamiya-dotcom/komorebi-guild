@@ -6,7 +6,7 @@ const reload = s => G.restore(JSON.parse(JSON.stringify(s)));
 
 function expedition(dungeon,party,policy="gather",setup=()=>{}) {
   const s=G.initial();
-  s.gold=2000;
+  s.gold=8000;
   s.history.push({dungeon:G.dungeons[dungeon].requires,cleared:true,path:["gate","home"],log:[]});
   s.roster.forEach(p=>p.rank=2);
   setup(s);

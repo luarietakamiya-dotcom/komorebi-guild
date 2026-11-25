@@ -5,7 +5,7 @@ const G = require("../engine.js");
 const reload = s => G.restore(JSON.parse(JSON.stringify(s)));
 function guild(kind) {
   const s = G.initial();
-  s.gold = 1800;
+  s.gold = 18000;
   if (kind) G.buildLandmark(s,kind);
   return s;
 }
@@ -26,16 +26,16 @@ test("丘は専用の一枠。建築・建て替えはギルド金庫から一�
   G.restore(s);
   assert.equal(s.town.landmark,null);
   assert.equal(Object.keys(G.landmarks).length,8);
-  s.gold=300; s.wallet=61;
+  s.gold=G.landmarkPrice(s)+60; s.wallet=61;
   assert.throws(()=>G.buildLandmark(s,"castle"));
   assert.throws(()=>G.buildLandmark(s,"constructor"));
   assert.throws(()=>G.build(s,"hill","inn"));
   assert.throws(()=>G.build(s,"square","castle"));
-  assert.equal(s.gold,300);
+  assert.equal(s.gold,G.landmarkPrice(s)+60);
   s.wallet--;
   G.buildLandmark(s,"castle");
   assert.equal(G.guildGold(s),0);
-  s.gold+=360;
+  s.gold+=G.landmarkPrice(s);
   assert.throws(()=>G.buildLandmark(s,"castle"));
   G.buildLandmark(s,"baths");
   assert.equal(G.guildGold(s),0);

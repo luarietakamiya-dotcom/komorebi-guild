@@ -14,7 +14,7 @@ const GuildScenery = (() => {
       angle += camera.angle;
       size *= camera.scale;
     }
-    return { id, x, headY:y - 34*size*(pose.squat || 1) - (pose.bob || 0),
+    return { id, x, y, size, headY:y - 34*size*(pose.squat || 1) - (pose.bob || 0),
       depth, paint: ctx => GuildStacks.draw(ctx,sprite,url,x,y,size,angle,pose) };
   }
 
@@ -42,7 +42,7 @@ const GuildScenery = (() => {
     });
   }
 
-  function townBattle(url,r,defenders,fraction,reduced,camera) {
+  function townBattle(url,r,defenders,fraction,reduced,camera,built = {}) {
     const road = Guild.raidRoute(r), view = GuildVoxel.views.town;
     const actors = [], posts = new Map(), targets = new Map();
     const project = (x,y) => camera ? camera.project(x,y) : [x,y];
@@ -51,23 +51,30 @@ const GuildScenery = (() => {
       actors.push(actor(undefined,sprite,url,u,v,size,angle,pose,view,camera));
     };
     for (const [i,p] of defenders.entries()) {
-      const [px,py] = road[Guild.raidPost(road,i)];
-      const x = px+12+(Math.floor(i/4)%3)*10, y = py+8;
+      const [px,py] = road[r.routeVersion===2 ? Guild.guardPost(r,p,i).step : Guild.raidPost(road,i)];
+      const x = px+12+(i%4)*11, y = py+8+Math.floor(i/4)*8;
       posts.set(p.id,[x,y]);
+      if (r.routeVersion===2 && (r.hits.some(h=>h.source===p.id) || !r.round)) {
+        const [sx,sy] = project(x,y);
+        actors.push({depth:Infinity,paint:ctx=>battleText(ctx,p.name,sx,sy-27-(i%2)*12,"#f5f1d1")});
+      }
       const swing = !reduced && r.hits.some(hit => hit.source===p.id) ? Math.sin(Math.PI*fraction) : 0;
-      fighter(Guild.jobs[p.job].face,x-swing*6,y,.62,-1.4,{tilt:-swing*.12});
+      fighter(Guild.characterArt(p).stack,x-swing*6,y,.62,-1.4,{tilt:-swing*.12});
     }
+    posts.set("mercenaries",road.at(-1).slice(0,2));
     if (r.knights) {
       const [x,y] = road[Math.floor((road.length-1)/2)];
       posts.set("knights",[x,y]);
       for (const dx of [-9,9]) fighter("gald",x+dx,y+5,.76,-1.4,{tilt:0});
     }
     for (const [i,e] of r.enemies.entries()) {
-      if (e.step<0 || e.step===road.length-1) continue;
-      if (!camera && r.outer && e.step<Guild.approaches[r.road].length) continue;
+      if (e.step<0 || e.escaped || (r.routeVersion!==2 && e.step===road.length-1)) continue;
+      if (!camera && r.outer && !r.routeVersion && e.step<Guild.approaches[r.road].length) continue;
       if (!e.hp && (fraction>.6 || !r.hits.some(hit => hit.target===i))) continue;
-      const [ax,ay] = road[e.step], [bx,by] = road[e.step+1];
-      const travel = e.hp ? fraction : 0;
+      const from = r.routeVersion===2 ? Math.max(0,e.previousStep ?? e.step) : e.step;
+      const to = r.routeVersion===2 ? e.step : e.step+1;
+      const [ax,ay] = road[from], [bx,by] = road[to];
+      const travel = e.hp ? fraction : (r.routeVersion===2 ? 1 : 0);
       const x = mix(ax,bx,travel), y = mix(ay,by,travel)+i%3*4;
       const [sx,sy] = project(x,y);
       targets.set(i,[sx,sy]);
@@ -81,20 +88,19 @@ const GuildScenery = (() => {
       }});
     }
     for (const hit of r.hits) {
-      let source = posts.get(hit.source);
-      if (!source) {
-        const plot = Guild.territoryPlots.find(p => p.id===hit.source);
-        if (plot?.road && !camera) continue;
-        if (plot) source = GuildVoxel.projectGround(...GuildVoxelMaps.plotCenter(plot),0,view);
-        else if (hit.source==="hall") source = GuildVoxelMaps.hallSite;
-      }
+      const plot = Guild.plotForSite(hit.source);
+      if (plot?.road && !camera) continue;
+      const source = plot ? GuildVoxelMaps.sitePads(plot,built)[plot.sites.indexOf(hit.source)]?.center :
+        hit.source === "hall" ? GuildVoxelMaps.hallSite : posts.get(hit.source);
       const target = targets.get(hit.target);
       if (!source || !target || fraction>.6) continue;
       const [x,y] = target, [sx,sy] = project(...source);
       actors.push({depth:Infinity,paint(ctx) {
         ctx.save(); ctx.strokeStyle = "#ffe8af"; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.moveTo(sx,sy-20);
-        ctx.lineTo(x,y-10); ctx.stroke(); ctx.restore();
+        ctx.lineTo(x,y-10); ctx.stroke();
+        if (hit.label) battleText(ctx,r.contributions[hit.source].name+"・"+hit.label,sx,sy-24,"#fff4c3");
+        ctx.restore();
       }});
     }
     return actors;
@@ -265,6 +271,8 @@ const GuildScenery = (() => {
       }
       const scale = canvas.clientWidth / width;
       const left = viewport.scrollLeft, right = left + viewport.clientWidth;
+      const top = viewport.scrollTop || 0, bottom = top + (viewport.clientHeight ?? Infinity);
+      const visible = a => a.x*scale >= left && a.x*scale <= right && (trip || a.headY*scale >= top && a.headY*scale <= bottom);
       if (!trip) firstTownFrame ??= now;
       if (speaker && (now >= expires || trip && !trip.unit.some(u=>u.id===speaker && u.state==="ok"))) hide();
       if (!speaker && now-timing.last >= rate[kind]) {
@@ -281,7 +289,7 @@ const GuildScenery = (() => {
           if (!active.some(u=>u.id===cue.id)) cue.id = pickOne(active)?.id;
           timing.key = key;
         } else if (now-firstTownFrame >= rate.town/3) {
-          cue = townCue(actors.filter(a=>a.x*scale >= left && a.x*scale <= right),people,timing.previous);
+          cue = townCue(actors.filter(visible),people,timing.previous);
         }
         const person = cue && people.find(p=>p.id===cue.id);
         if (person) {
@@ -296,7 +304,7 @@ const GuildScenery = (() => {
       }
       if (!speaker) return;
       const anchor = actors.find(a=>a.id===speaker);
-      if (!anchor || anchor.x*scale < left || anchor.x*scale > right) { hide(); return; }
+      if (!anchor || !visible(anchor)) { hide(); return; }
       const x = anchor.x*scale, w = bubble.offsetWidth;
       const edge = Math.max(left+3,Math.min(x-w/2,right-w-3));
       bubble.style.left = edge+"px";
@@ -305,7 +313,115 @@ const GuildScenery = (() => {
     };
   }
 
-  function mount(canvas, { people, trip, url, fraction, time, raidScene, built, landmark, emblem, selectPlot, activePlot, openHall, camera, turn, chatterRate }) {
+  const maxTownZoom = 2;
+  function townNavigation(surface, canvas, viewport, initialZoom, zoomChanged, getTurn, clearHover) {
+    // Capture on the original element so a stationary tap still reaches its marker.
+    const pointers = new Map();
+    let zoom = initialZoom, dragged = false, start, steps;
+    function position(event) {
+      const rect = surface.getBoundingClientRect();
+      return {x:event.clientX-rect.left, y:event.clientY-rect.top};
+    }
+    function setZoom(value, from, to = from) {
+      const next = Math.max(1,Math.min(maxTownZoom,value));
+      const ratio = next/zoom;
+      from ??= {x:viewport.clientWidth/2,y:viewport.clientHeight/2};
+      to ??= from;
+      const left = (viewport.scrollLeft+from.x)*ratio-to.x;
+      const top = (viewport.scrollTop+from.y)*ratio-to.y;
+      if (zoom !== next) {
+        zoom = next;
+        viewport.style.setProperty("--town-zoom",String(zoom));
+        viewport.toggleAttribute("data-zoomed",zoom>1);
+        zoomChanged(zoom);
+        clearHover();
+      }
+      // The scroll container clamps both axes to the rendered town.
+      viewport.scrollTo(left,top);
+    }
+    function begin(event) {
+      if (event.button !== 0 || pointers.size >= (zoomChanged ? 2 : 1)) return;
+      if (!pointers.size) {
+        dragged = false;
+        start = position(event);
+        steps = 0;
+      }
+      if (!zoomChanged && (!getTurn() || event.pointerType === "touch")) return;
+      pointers.set(event.pointerId,position(event));
+      (event.target || canvas).setPointerCapture(event.pointerId);
+      if (pointers.size === 2) {
+        dragged = true;
+        clearHover();
+      }
+    }
+    function move(event) {
+      const last = pointers.get(event.pointerId);
+      if (!last) return;
+      const point = position(event);
+      pointers.set(event.pointerId,point);
+      if (pointers.size === 2) {
+        const other = [...pointers].find(([id])=>id!==event.pointerId)[1];
+        const distance = p => Math.hypot(p.x-other.x,p.y-other.y);
+        const middle = p => ({x:(p.x+other.x)/2,y:(p.y+other.y)/2});
+        if (distance(last) > 0) setZoom(zoom*distance(point)/distance(last),middle(last),middle(point));
+        return;
+      }
+      const turn = getTurn();
+      const rotating = turn && zoom === 1 && event.pointerType !== "touch" && steps !== null;
+      const panning = zoomChanged && (zoom > 1 || canvas.clientWidth > viewport.clientWidth);
+      if (!rotating && !zoomChanged) return;
+      if (!dragged && Math.hypot(point.x-start.x,point.y-start.y) <= 7) return;
+      const origin = dragged ? last : start;
+      dragged = true;
+      clearHover();
+      if (rotating) {
+        const next = Math.trunc((point.x-start.x)/38);
+        if (next !== steps) turn(next-steps);
+        steps = next;
+      } else if (panning) {
+        viewport.scrollTo(viewport.scrollLeft+origin.x-point.x, viewport.scrollTop+origin.y-point.y);
+      }
+    }
+    function end(event) {
+      if (!pointers.delete(event.pointerId)) return;
+      if (pointers.size) {
+        start = pointers.values().next().value;
+        steps = null;
+      }
+    }
+    function wheel(event) {
+      if (!event.deltaY || !event.ctrlKey && (zoom === 1 && event.deltaY > 0 || zoom === maxTownZoom && event.deltaY < 0)) return;
+      event.preventDefault();
+      const units = event.deltaMode===1 ? 16 : event.deltaMode===2 ? viewport.clientHeight : 1;
+      setZoom(zoom*Math.exp(-event.deltaY*units*.002),position(event));
+    }
+    function keydown(event) {
+      if (event.target !== viewport) return;
+      const delta = {ArrowLeft:[-48,0],ArrowRight:[48,0],ArrowUp:[0,-48],ArrowDown:[0,48]}[event.key];
+      if (delta) {
+        viewport.scrollBy(...delta);
+        event.preventDefault();
+      }
+    }
+    function cancelClick(event) {
+      if (dragged && event.detail !== 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }
+    const events = [["pointerdown",begin],["pointerup",end],["pointercancel",end],["lostpointercapture",end]];
+    if (zoomChanged) {
+      viewport.toggleAttribute("data-zoomed",zoom>1);
+      events.push(["wheel",wheel,{passive:false}],["keydown",keydown],["click",cancelClick,true]);
+    }
+    for (const args of events) surface.addEventListener(...args);
+    return {setZoom, move, dragging:()=>dragged, stop() {
+      for (const args of events) surface.removeEventListener(...args);
+      pointers.clear();
+    }};
+  }
+
+  function mount(canvas, { people, trip, url, fraction, time, raidScene, built, landmark, emblem, selectPlot, activePlot, ranges, openHall, selectPerson, camera, turn, zoom = 1, zoomChanged, chatterRate }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return () => {};
     const viewport = canvas.closest(".panorama-scroll");
@@ -318,17 +434,24 @@ const GuildScenery = (() => {
     const guildFlag = isTown && emblem ? guildStandard(emblem) : null;
     const converse = chatterRate && sceneConversation(canvas,viewport,people,trip,chatterRate);
     if (isTown) viewport.scrollLeft = (canvas.clientWidth - viewport.clientWidth) / 2;
-    let hovered, hoverMarker;
+    const gestureSurface = zoomChanged ? viewport : canvas;
+    let hovered, hoverMarker, navigation, walkers = [];
     function targetUnderPointer(event) {
       if (url && displayed !== draw) return;
       const rect = canvas.getBoundingClientRect();
-      return draw.targetAtPixel((event.clientX-rect.left)*width/rect.width, (event.clientY-rect.top)*height/rect.height);
+      const x = (event.clientX-rect.left)*width/rect.width, y = (event.clientY-rect.top)*height/rect.height;
+      if (selectPerson) {
+        // Walkers are sorted back to front by the frame that was actually drawn.
+        const person = walkers.findLast(a=>Math.abs(x-a.x)<=9*a.size && y>=a.headY && y<=a.y);
+        if (person && !(draw.pickProp(x,y)?.depth > person.depth)) return person;
+      }
+      return draw.targetAtPixel(x,y);
     }
-    let drag, suppressClick = false;
     function pick(event) {
-      if (suppressClick) { suppressClick = false; return; }
+      if (navigation?.dragging() && event.detail !== 0) return;
       const target = targetUnderPointer(event);
-      if (target?.id === "guild") openHall?.();
+      if (target?.headY !== undefined) selectPerson(target.id);
+      else if (target?.id === "guild") openHall?.();
       else if (target) selectPlot(target.id);
     }
     function setHover(target) {
@@ -337,62 +460,54 @@ const GuildScenery = (() => {
       hovered = target;
       canvas.style.cursor = target ? "pointer" : "";
       const markerId = target?.id === "guild" ? "hall" : target?.id;
-      hoverMarker = target && viewport.querySelector(`.plot-marker[data-id="${markerId}"]`);
+      hoverMarker = target && target.headY === undefined ? viewport.querySelector(`.plot-marker[data-id="${markerId}"]`) : null;
       hoverMarker?.setAttribute("data-hover","");
     }
-    function beginDrag(event) {
-      if (!event.isPrimary || event.button !== 0) return;
-      suppressClick = false;
-      if (!camera || !turn || event.pointerType === "touch") return;
-      drag = {id:event.pointerId,x:event.clientX,steps:0};
-      canvas.setPointerCapture(event.pointerId);
-    }
     function move(event) {
-      if (drag && drag.id === event.pointerId) {
-        const distance = event.clientX-drag.x;
-        if (Math.abs(distance)>7) suppressClick = true;
-        const steps = Math.trunc(distance/38);
-        if (steps !== drag.steps) {
-          turn(steps-drag.steps);
-          drag.steps = steps;
-        }
-        if (suppressClick) return;
-      }
-      if (event.pointerType !== "touch") setHover(targetUnderPointer(event));
-    }
-    function endDrag(event) {
-      if (drag?.id === event.pointerId) drag = null;
+      navigation?.move(event);
+      if (event.pointerType !== "touch" && (!event.target || event.target === canvas) && !(navigation?.dragging() && event.buttons))
+        setHover(targetUnderPointer(event));
     }
     function leave() { setHover(undefined); }
     function highlight(ctx) {
       const plot = activePlot?.() || hovered;
-      if (plot && plot.id !== "guild") GuildVoxelMaps.highlight(ctx,plot,camera);
+      if (plot && plot.headY === undefined && plot.id !== "guild") {
+        GuildVoxelMaps.highlight(ctx,plot,camera);
+        ctx.save();
+        if (camera) ctx.transform(...camera.matrix);
+        for (const {center,range} of ranges?.(plot) || []) {
+          ctx.beginPath(); ctx.ellipse(...center,range,range/2,0,0,Math.PI*2);
+          ctx.fillStyle = "rgba(74,133,96,.16)"; ctx.fill();
+          ctx.strokeStyle = "#497c5e"; ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
     if (isTown && selectPlot) {
-      if (turn) {
-        canvas.addEventListener("pointerdown",beginDrag);
-        canvas.addEventListener("lostpointercapture",endDrag);
-      }
+      if (turn || zoomChanged) navigation = townNavigation(gestureSurface,canvas,viewport,zoom,zoomChanged,()=>camera && turn,leave);
       canvas.addEventListener("click",pick);
-      canvas.addEventListener("pointermove",move);
+      gestureSurface.addEventListener("pointermove",move);
       canvas.addEventListener("pointerleave",leave);
     }
     let frame, active = true;
     function paint(now) {
-      const scale = Math.min(window.devicePixelRatio || 1, 2) * canvas.clientWidth / width;
-      const pixels = Math.max(1, Math.round(width * scale));
-      if (canvas.width !== pixels || canvas.height !== Math.round(height * scale)) {
+      const screenScale = Math.min(window.devicePixelRatio || 1, 2) * canvas.clientWidth / width;
+      // Bound the zoomed town bitmap on high-density displays.
+      const scale = isTown ? Math.min(screenScale,2*Math.max(1,viewport.clientWidth/width)) : screenScale;
+      const pixels = Math.max(1,Math.round(width*scale)), rows = Math.max(1,Math.round(height*scale));
+      if (canvas.width !== pixels || canvas.height !== rows) {
         canvas.width = pixels;
-        canvas.height = Math.max(1, Math.round(height * scale));
+        canvas.height = rows;
       }
       ctx.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
       ctx.imageSmoothingEnabled = true;
       if (isTown) {
         const battle = raidScene?.();
-        const actors = battle ? townBattle(url,battle.raid,battle.defenders,battle.fraction,reduced.matches,camera) :
+        const actors = battle ? townBattle(url,battle.raid,battle.defenders,battle.fraction,reduced.matches,camera,built) :
           town(people,url,time ? time() : now/1000,reduced.matches,draw.routes,camera);
         draw(ctx,actors,highlight,guildFlag);
-        converse?.(now,battle ? [] : actors);
+        walkers = battle ? [] : actors;
+        converse?.(now,walkers);
         displayed = draw;
       } else {
         const progress = fraction();
@@ -424,16 +539,14 @@ const GuildScenery = (() => {
       active = false;
       cancelAnimationFrame(frame);
       if (isTown && selectPlot) {
-        if (turn) {
-          canvas.removeEventListener("pointerdown",beginDrag);
-          canvas.removeEventListener("lostpointercapture",endDrag);
-        }
+        navigation?.stop();
         canvas.removeEventListener("click",pick);
-        canvas.removeEventListener("pointermove",move);
+        gestureSurface.removeEventListener("pointermove",move);
         canvas.removeEventListener("pointerleave",leave);
         leave();
       }
     }
+    stop.setZoom = navigation?.setZoom;
     stop.setCamera = next => {
       cancelAnimationFrame(frame);
       leave();
@@ -444,5 +557,5 @@ const GuildScenery = (() => {
     };
     return stop;
   }
-  return { mount };
+  return { mount, maxTownZoom };
 })();

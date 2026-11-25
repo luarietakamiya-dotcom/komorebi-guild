@@ -4,22 +4,49 @@ const Guild = (() => {
   const jobs = {
     sword: { name: "剣士", hp: 40, atk: 12, def: 8, spd: 9, face: "mina", next:"fencer", skills:["rally","slash","parry"] },
     guard: { name: "盾役", hp: 55, atk: 7, def: 14, spd: 5, face: "gald", next:"knight", skills:["brace","shield","counter"] },
-    healer: { name: "癒し手", hp: 28, atk: 5, def: 6, spd: 8, face: "popo", next:"cleric", skills:["renew","aid","focus"] },
+    healer: { name: "治癒術師", hp: 28, atk: 5, def: 6, spd: 8, face: "popo", next:"cleric", skills:["renew","aid","focus"] },
     hunter: { name: "狩人", hp: 32, atk: 10, def: 6, spd: 12, face: "shion", next:"ranger", skills:["scout","aim","hide"], forage:true },
     mage: { name:"魔術師", hp:26, atk:8, def:4, spd:8, face:"popo", next:"sage", skills:["ember","ward","focus"] },
+    warrior: {name:"戦士", hp:48, atk:14, def:9, spd:6, face:"gald", skills:["cleave","brace","counter"]},
+    fighter: {name:"格闘家", hp:40, atk:11, def:7, spd:12, face:"mina", skills:["strike","footwork","focus"]},
+    bard: {name:"楽士", hp:32, atk:7, def:6, spd:11, face:"shion", skills:["song","aid","focus"]},
+    apothecary: {name:"薬師", hp:34, atk:6, def:7, spd:9, face:"popo", skills:["salve","aid","scout"]},
     sage: { name:"賢者", hp:30, atk:11, def:6, spd:9, face:"popo", skills:["flare","prayer"] },
     fencer: { name:"フェンサー", hp:42, atk:14, def:8, spd:12, face:"mina", skills:["lunge","footwork"] },
     knight: { name:"ナイト", hp:60, atk:9, def:16, spd:5, face:"gald", skills:["bastion","bash"] },
     cleric: { name:"回復術師", hp:32, atk:6, def:7, spd:9, face:"popo", skills:["prayer","ward"] },
     swordmaster: { name:"剣豪", hp:46, atk:18, def:9, spd:15, face:"shusai", skills:["iai","parry"] },
     princess: { name:"姫騎士", hp:58, atk:11, def:18, spd:8, face:"yuria", skills:["royalWard","aid"] },
+    exorcist: { name:"退魔忍", hp:38, atk:11, def:7, spd:17, spirit:20, curseWard:true, face:"riina", skills:["sealStrike","footwork","ward"] },
+    miko: { name:"巫女", hp:32, atk:6, def:7, spd:9, magic:17, spirit:22, purifies:true, face:"yukina", skills:["shrinePrayer","ward","ember"] },
+    overlord: { name:"覇王", hp:56, atk:19, def:12, spd:7, face:"jobava", skills:["warCry","cleave","brace"] },
+    salaryman: { name:"サラリーマン", hp:43, atk:9, def:9, spd:10, dex:16, face:"tanaka", skills:["appraise","aid","focus"] },
+    idol: { name:"アイドル", hp:33, atk:7, def:6, spd:14, spirit:16, face:"shiina", skills:["encore","song","footwork"] },
+    chef: { name:"料理人", hp:42, atk:10, def:8, spd:8, dex:14, face:"goto", skills:["hotSoup","cleave","salve"] },
     thief: {name:"盗賊", hp:30, atk:10, def:5, spd:14, face:"shion", skills:["scout","hide","slash"], detect:true},
     druid: {name:"ドルイド", hp:32, atk:7, def:7, spd:9, face:"popo", skills:["renew","ward","focus"], detect:true},
     beastmaster: {name:"獣使い", hp:38, atk:10, def:8, spd:10, face:"gald", skills:["scout","aim","rally"], detect:true},
     ranger: { name:"レンジャー", hp:36, atk:12, def:7, spd:14, face:"shion", skills:["volley","wind"], forage:true }
   };
-  const startingJobs = ["sword","guard","healer","hunter","mage","thief","druid","beastmaster"];
+  const regularJobs = ["sword","guard","healer","hunter","mage","thief","druid","beastmaster"];
+  const variantJobs = ["sword","warrior","thief","healer","mage","fighter","hunter","bard","apothecary"];
+  const startingJobs = [...new Set([...regularJobs,...variantJobs])];
+  const hairColors = {gold:"金", silver:"銀", black:"黒", brown:"茶"};
+  function variantJob(job) {
+    return variantJobs.find(id => id === job || jobs[id].next === job);
+  }
+  function characterArt(p) {
+    const job = variantJob(p.job);
+    if (job && ["male","female"].includes(p.sex) && Object.hasOwn(hairColors,p.hair)) {
+      const stack = [job,p.sex,p.hair].join("_");
+      return {stack, portrait:"portrait_"+stack};
+    }
+    const face = jobs[p.job].face;
+    return {stack:face, portrait:face};
+  }
   const abilities = {
+    cleave: {name:"斧の一撃", atk:4}, strike: {name:"連拳", atk:3},
+    song: {name:"行進の調べ", spd:3}, salve: {name:"軟膏手当", heal:6},
     ember: {name:"火の矢", atk:3}, flare: {name:"火炎術", atk:5},
     rally: {name:"切り返し", atk:4, round:2}, slash: {name:"踏み込み斬り", atk:2},
     brace: {name:"踏ん張り", def:8, round:2}, shield: {name:"盾構え", def:4},
@@ -31,6 +58,10 @@ const Guild = (() => {
     bastion: {name:"鉄壁", def:8}, bash: {name:"盾打ち", atk:4},
     prayer: {name:"癒しの祈り", heal:8}, ward: {name:"護身結界", def:6},
     iai: {name:"燕返し", atk:8}, royalWard: {name:"白百合の守護", def:12},
+    sealStrike: {name:"破邪の印", atk:4},
+    shrinePrayer: {name:"鈴の祈り", heal:9},
+    warCry: {name:"覇王の号令", spd:5}, appraise: {name:"弱点の見積もり", atk:3},
+    encore: {name:"とっておきの応援歌", def:7}, hotSoup: {name:"まかないスープ", heal:7},
     volley: {name:"連射", atk:5}, wind: {name:"風読み", spd:5}
   };
   const skillLimit = 3, promotionLevel = 2, resetCost = 30;
@@ -142,20 +173,20 @@ const Guild = (() => {
   const items = { herb: { name: "薬草", price: 10 }, ore: { name: "鉱石", price: 24 } };
   const landmarks = {
     castle:{name:"お城", effect:"騎士団が街道で自動迎撃。行方不明者の捜索や捕虜の救出に、派遣から1手で到着。"},
-    cathedral:{name:"大聖堂", effect:"消失までの死亡回数が3回から5回に。120 Gで欠損や呪いを完治。精神崩壊の治療と妊娠の療養短縮も可能。"},
-    academy:{name:"大図書館・学院", effect:"上位職の技を転職前から習得でき、昇級試験の合格率が20ポイント上昇。出発前に古地図で分岐の先を読める。"},
-    observatory:{name:"天文台", effect:"襲撃を前週から観測し、進路・敵数・ヌシの有無を特定。吉の週には宝箱から鉱石を追加回収。どの職業でも罠を感知できる。"},
-    manufactory:{name:"大工房", effect:"営業中の全工房に毎週1点の技術経験。注文品の品質と主効果が2段階上がり、義肢の補正も向上。"},
-    memorial:{name:"英雄廟", effect:"消失時の信用減点を15から5に軽減。毎週、所属全員の士気＋6。引退者の歩みを顕彰する。"},
-    baths:{name:"大浴場・温泉", effect:"町での休息・休暇のHP・MP回復率＋35ポイント、士気＋8。湯治で怪我の療養が毎週さらに1週進む。"},
-    exchange:{name:"交易会館", effect:"素材の売値が25％上昇、素材込み注文の仕入れが25％引き。毎週の交易収入24 G、一般冒険者の来訪枠＋3。"}
+    cathedral:{name:"大聖堂", effect:"交戦のたびに守備隊のHPを3回復。消失までの死亡回数が3回から5回に。120 Gで欠損や呪いを完治。精神崩壊の治療と妊娠の療養短縮も可能。"},
+    academy:{name:"大図書館・学院", effect:"守備隊の攻撃オーダーの威力＋4。上位職の技を転職前から習得でき、昇級試験の合格率が20ポイント上昇。出発前に古地図で分岐の先を読める。"},
+    observatory:{name:"天文台", effect:"防衛施設の射程＋40。襲撃を前週から観測し、進路・敵数・ヌシの有無を特定。吉の週には宝箱から鉱石を追加回収。どの職業でも罠を感知できる。"},
+    manufactory:{name:"大工房", effect:"各施設に襲撃ごと1回、耐久8の応急修理。営業中の全工房に毎週1点の技術経験。注文品の品質と主効果が2段階上がり、義肢の補正も向上。"},
+    memorial:{name:"英雄廟", effect:"守備隊の攻撃威力＋3。消失時の信用減点を15から5に軽減。毎週、所属全員の士気＋6。引退者の歩みを顕彰する。"},
+    baths:{name:"大浴場・温泉", effect:"守備隊の被ダメージを2軽減し、術の消費MPを半減。町での休息・休暇のHP・MP回復率＋35ポイント、士気＋8。湯治で怪我の療養が毎週さらに1週進む。"},
+    exchange:{name:"交易会館", effect:"広場に傭兵を派遣し、被害時に修理専用資金72 Gを支給。素材の売値が25％上昇、素材込み注文の仕入れが25％引き。毎週の交易収入24 G、一般冒険者の来訪枠＋3。"}
   };
-  const landmarkPrice = s => s.town.landmark ? 360 : 240;
+  const landmarkPrice = s => s.town.landmark ? 5400 : 3600;
   function buildLandmark(s,kind) {
+    check(!s.raids.active,"丘の建築は襲撃が終わってから行います。");
     check(Object.hasOwn(landmarks,kind) && kind !== s.town.landmark,"丘に建てる別の建造物を選んでください。");
     spend(s,null,landmarkPrice(s));
     s.town.landmark = kind;
-    if (kind === "castle" && s.raids.active) s.raids.active.knights = true;
     if (kind === "observatory") {
       if (s.raids.warning) s.raids.warning.observed = true;
       else forecastIfDue(s);
@@ -219,21 +250,23 @@ const Guild = (() => {
     }
   }
 
+  // A second building is offered where two full-size farm diamonds fit within the
+  // surveyed clearing. The layout moves their centers and never sets their size.
   // IDs are save keys. The tile count also determines farm cost and weekly yield.
   const plots = [
-    { id: "orchard", name: "果樹の丘", size: 4 },
-    { id: "birch", name: "白樺の丘", size: 3 },
-    { id: "dawn", name: "朝日の丘", size: 3 },
-    { id: "wind", name: "風見の丘", size: 4 },
-    { id: "west", name: "西の街道", size: 3 },
-    { id: "east", name: "東の街道", size: 3 },
-    { id: "brook", name: "小川のほとり", size: 5 },
-    { id: "square", name: "広場の脇", size: 1 },
-    { id: "linden", name: "菩提樹通り", size: 3 },
-    { id: "mill", name: "風車通り", size: 4 },
-    { id: "clover", name: "クローバー平原", size: 5 },
-    { id: "south", name: "南門前", size: 2 },
-    { id: "sunny", name: "ひなた原", size: 4 }
+    { id: "orchard", name: "果樹の丘", size: 4, center:[430,165], pairCenters:[[415,169],[467,145]] },
+    { id: "birch", name: "白樺の丘", size: 3, center:[243,285] },
+    { id: "dawn", name: "朝日の丘", size: 3, center:[324,348] },
+    { id: "wind", name: "風見の丘", size: 4, center:[650,258] },
+    { id: "west", name: "西の街道", size: 3, center:[209,362] },
+    { id: "east", name: "東の街道", size: 3, center:[1136,372] },
+    { id: "brook", name: "小川のほとり", size: 5, center:[758,385], pairCenters:[[743,346],[843,410]] },
+    { id: "square", name: "広場の脇", size: 1, center:[405,416] },
+    { id: "linden", name: "菩提樹通り", size: 3, center:[504,281] },
+    { id: "mill", name: "風車通り", size: 4, center:[919,498], pairCenters:[[888,490],[977,524]] },
+    { id: "clover", name: "クローバー平原", size: 5, center:[385,505], pairCenters:[[282,453],[400,508]] },
+    { id: "south", name: "南門前", size: 2, center:[523,568] },
+    { id: "sunny", name: "ひなた原", size: 4, center:[804,578] }
   ];
   // The watercolor survey ends at the original thirteen parcels.
   const outerPlots = [
@@ -249,16 +282,49 @@ const Guild = (() => {
     {id:"southFork", name:"南門の坂下", size:4, road:"south", center:[644,751], radius:48}
   ];
   const territoryPlots = [...plots,...outerPlots];
+  const defenseSpots = [
+    ["westGate","西の木戸","west",-288,294], ["westNarrows","西の隘路","west",-103,379],
+    ["eastGate","東の木戸","east",1660,247], ["eastNarrows","岩峡の出口","east",1483,348],
+    ["northGate","北の橋頭","north",984,-90], ["northNarrows","鞍部の関","north",605,-45],
+    ["riverGate","河岸の木戸","riverside",1250,805], ["riverNarrows","浅瀬の関","riverside",1084,730],
+    ["southGate","南の木戸","south",449,894], ["southNarrows","坂道の関","south",566,782]
+  ].map(([id,name,road,x,y])=>({id,name,road,center:[x,y],radius:12,size:1,defenseOnly:true}));
+  const allPlots = [...territoryPlots,...defenseSpots];
+  // Original pad geometry is also used for defense range and pointer picking.
+  const twinPads = {
+    orchard:[[390,160],[474,161],31], wind:[[599,233],[723,258],33],
+    brook:[[720,352],[848,406],43], mill:[[850,484],[983,512],42],
+    clover:[[273,456],[391,505],45], sunny:[[737,588],[866,573],44]
+  };
+  function pairedPads(plot) {
+    const [x,y] = plot.center, r = plot.radius;
+    return twinPads[plot.id] || [[x-r*.54,y],[x+r*.54,y],r*.4];
+  }
+  function defenseCenter(site,built) {
+    const plot = plotForSite(site);
+    return plot.sites.length === 2 && built[plot.sites[1]] ? pairedPads(plot)[plot.sites.indexOf(site)] : plot.center;
+  }
+  // The first site keeps the plot's historical save key, including its shop and repairs.
+  const sitePlots = new Map();
+  for (const plot of allPlots) {
+    plot.sites = plot.size ** 2 >= 16 ? [plot.id, plot.id+"-2"] : [plot.id];
+    for (const site of plot.sites) sitePlots.set(site,plot);
+  }
+  // Keep every historical site addressable, including a second workshop or tower in old saves.
+  function plotCapacity(plot,built) {
+    return plot.pairCenters || (plot.sites.length === 2 && built[plot.sites[1]]) ? 2 : 1;
+  }
+  const plotForSite = site => sitePlots.get(site);
   const buildings = {
     forge:  { name: "鍛冶屋", group: "生産・生活", cost: 100, ore:1 },
     inn:    { name: "宿屋", group: "生産・生活", cost: 90, income:9, recovery:5 },
     tavern: { name: "酒場", group: "生産・生活", cost: 65, income:6, morale:10 },
     shop:   { name: "商店", group: "生産・生活", cost: 75, income:8 },
     school: { name: "訓練所", group: "生産・生活", cost: 80, strength:1, experience:2 },
-    bow:    { name: "弓の塔", group: "防衛", cost: 80, defense:6 },
-    watch:  { name: "見張り台", group: "防衛", cost: 45, defense:3 },
-    magic:  { name: "魔法の塔", group: "防衛", cost: 125, defense:10 },
-    wall:   { name: "城壁", group: "防衛", cost: 55, defense:4 },
+    bow:    { name: "バリスタ台", group: "防衛", cost: 1800, defense:6 },
+    watch:  { name: "見張り塔", group: "防衛", cost: 1200, defense:3 },
+    magic:  { name: "魔法塔", group: "防衛", cost: 2200, defense:10 },
+    wall:   { name: "バリケード", group: "防衛", cost: 900, defense:4 },
     farm:   { name: "畑", group: "畑", cost: 8, perTile: true, food:1 }
   };
   // Each workshop owns its specialty and progress. Buildings keep their original
@@ -390,7 +456,7 @@ const Guild = (() => {
   }
   function packSupplies(s,team,key,count) {
     const packed = [];
-    for (const [owner,store] of [["party",team.bag],["guild",s]]) {
+    for (const [owner,store] of (team ? [["party",team.bag],["guild",s]] : [["guild",s]])) {
       while (packed.length < count && store.supplies[key] > 0) {
         const lot = store.lots.filter(l => l.key === key).sort((a,b) => b.quality-a.quality)[0];
         packed.push({owner,quality:lot?.quality || 1});
@@ -650,18 +716,21 @@ const Guild = (() => {
   function townPrice(plot, building) {
     return building.cost * (building.perTile ? plot.size ** 2 : 1);
   }
-  function build(s, plotId, kind, specialty = defaultSpecialty[kind]) {
-    const plot = territoryPlots.find(p => p.id === plotId);
+  function build(s, site, kind, specialty = defaultSpecialty[kind]) {
+    const plot = plotForSite(site);
     check(plot && Object.hasOwn(buildings, kind), "区画と建物を選んでください。");
-    check(!s.town.plots[plotId], "この区画は使用中です。");
+    check(!plot.defenseOnly || buildings[kind].defense,"ここには防衛施設を建築できます。");
+    if (buildings[kind].defense) check(!s.raids.active,"防衛施設の建築は平時に行います。");
+    check(site === plot.sites.slice(0,plotCapacity(plot,s.town.plots)).find(id => !s.town.plots[id]), "この建築枠は選べません。");
     const price = townPrice(plot, buildings[kind]);
     check(guildGold(s) >= price, "建築資金が足りません。");
     if (specialty !== undefined) {
       check(Object.hasOwn(shopTypes, specialty) && shopTypes[specialty].building === kind, "建物に合う専門店を選んでください。");
-      s.town.workshops[plotId] = newWorkshop(specialty,calendarDate(s));
+      s.town.workshops[site] = newWorkshop(specialty,calendarDate(s));
     }
     s.gold -= price;
-    s.town.plots[plotId] = kind;
+    s.town.plots[site] = kind;
+    if (buildings[kind].defense) s.town.defenses[site] = newDefense(kind);
     if (plot.road) s.town.outerTerritory = true;
   }
   const hasInn = s => Object.entries(s.town.plots).some(([id,kind]) => kind==="inn" && !s.town.repairs?.[id]);
@@ -689,11 +758,11 @@ const Guild = (() => {
   }
   function facilityTotals(town) {
     const total = Object.fromEntries(Object.keys(facilityEffectText).map(key => [key,0]));
-    for (const plot of territoryPlots) {
-      const kind = town.plots[plot.id];
-      if (!Object.hasOwn(buildings,kind) || town.repairs?.[plot.id]) continue;
-      const effects = facilityEffects(kind,plot,town.workshops?.[plot.id]);
-      for (const [key,n] of Object.entries(effects)) total[key] += n;
+    for (const [site,kind] of Object.entries(town.plots)) {
+      const plot = plotForSite(site);
+      if (!plot || !Object.hasOwn(buildings,kind) || town.repairs?.[site]) continue;
+      const effects = facilityEffects(kind,plot,town.workshops?.[site]);
+      for (const [key,n] of Object.entries(effects)) total[key] += n * (key === "defense" ? town.defenses?.[site]?.level || 1 : 1);
     }
     if (town.landmark === "exchange") total.income += 24;
     if (town.landmark === "baths") {
@@ -917,7 +986,7 @@ const Guild = (() => {
     if (!p.sex) {
       const serial = /^(?:guest|child)-(\d+)$/.exec(p.id);
       p.sex = serial ? (Number(serial[1])%2 ? "female" : "male") :
-        ["mina","yuria"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
+        ["mina","yuria","riina","yukina","shiina"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
     }
     p.injury ??= null;
     p.leaveWeek ??= 0;
@@ -1026,38 +1095,93 @@ const Guild = (() => {
     checkGuildPromotion(s);
   }
   const fame = s => s.metrics[0] + s.ranks.renown + Math.max(0,Math.floor((s.metrics[1]-50)/5));
+  const uniqueVisitInterval = 12;
   const uniqueGuests = {
     shusai:{species:"human", age:58, name:"シュウサイ", job:"swordmaster", trait:"careful", pronoun:"拙者", tone:"normal", ending:"でござる",
-      rank:3, level:4, story:"諸国の道場を巡る剣豪。立ち合う前に、相手の足運びを見る。", invitation:"名声12で来訪。討伐勝利を記録した隊に力を貸します。",
+      rank:3, level:4, story:"諸国の道場を巡る剣豪。立ち合う前に、相手の足運びを見る。", invitation:"名声12以上で特別な来訪の候補になります。討伐勝利を記録した隊に力を貸します。",
+      letter:"剣豪シュウサイが道場からの帰りに立ち寄った。「この町の剣筋、拙者にも見せてくだされ」",
       meet:s => fame(s) >= 12, join:s => s.history.some(r => r.wins > 0)},
     yuria:{species:"elf", age:86, name:"ユーリア", job:"princess", trait:"kind", pronoun:"わたくし", tone:"polite", ending:"ですわ",
-      rank:3, level:4, story:"領民を守るため旅に出た姫騎士。盾には故郷の白百合を刻んでいる。", invitation:"名声20で来訪。宿屋を備え、信用70以上のギルドへの所属を望んでいます。",
-      meet:s => fame(s) >= 20, join:s => s.metrics[1] >= 70 && hasInn(s)}
+      rank:3, level:4, story:"領民を守るため旅に出た姫騎士。盾には故郷の白百合を刻んでいる。", invitation:"名声20以上で特別な来訪の候補になります。宿屋を備え、信用70以上のギルドへの所属を望んでいます。",
+      letter:"姫騎士ユーリアから白百合の封書が届いた。「領民を託せるギルドと聞き、参りましたわ」",
+      meet:s => fame(s) >= 20, join:s => s.metrics[1] >= 70 && hasInn(s)},
+    riina:{species:"human", age:27, name:"リィナ", job:"exorcist", trait:"careful", pronoun:"私", tone:"polite", ending:"です",
+      rank:3, level:4, story:"封じ札を携え、街道の祠を巡る忍び。足が速く、鍛えた精神で詠唱攻撃に耐え、封印の呪いを祓う。",
+      invitation:"名声16以上で特別な来訪の候補になります。「苔むす森の洞」を踏破したギルドに力を貸します。",
+      letter:"退魔忍リィナがホールを訪れた。「森の祠に魔の気配があります。苔むす森の洞を踏破した方に、封じ札を託したいのです」",
+      pledge:"苔むす森の洞を踏破した隊とともに、森の祠を守ると誓った。",
+      meet:s => fame(s) >= 16, join:s => dungeonOpen(s,"canal")},
+    yukina:{species:"human", age:25, name:"ユキナ", job:"miko", trait:"kind", pronoun:"私", tone:"polite", ending:"です",
+      rank:2, level:4, story:"山の社から里へ薬草を届ける巫女。魔力を鈴の音にのせて傷を癒やす。呪いの祭壇では御幣を振り、MPを2使って仲間ひとりの封印や鈍重の呪いを防ぐ。",
+      invitation:"名声18以上で特別な来訪の候補になります。錬金術師の店が営業している町で専属契約に応じます。",
+      letter:"巫女ユキナが薬草を携えてホールを訪れた。「山の社で摘んだ薬草です。錬金術師さんのお店が開いたら、私もここで旅の方々の傷を癒やしたいのです」",
+      pledge:"町の錬金術師に薬草を届け、隊の癒やし手を務めることになった。",
+      meet:s => fame(s) >= 18, join:s => hasWorkingShop(s,"alchemy")},
+    jobava:{species:"human", age:45, name:"ジョバヴァ", job:"overlord", trait:"bold", pronoun:"余", tone:"normal", ending:"",
+      rank:3, level:5, story:"かつて大軍を率いた王。今も自分の足で隊を率い、無事に指揮を終えると帰還した隊員の士気を4上げる。戦場では号令で仲間の足を速める。",
+      invitation:"名声22以上で特別な来訪の候補になります。町への襲撃を一度でも撃退すると契約できます。",
+      letter:"覇王ジョバヴァが広場に立った。「余が見たいのは城壁の高さではない。この町を守り抜いた者たちの顔だ」",
+      pledge:"襲撃を退けた守備隊と肩を並べ、町の明日を守ると誓った。",
+      meet:s => fame(s) >= 22, join:s => s.raids.reports.some(r => r.repelled)},
+    tanaka:{species:"human", age:36, name:"タナカ", job:"salaryman", trait:"careful", pronoun:"私", tone:"polite", ending:"です",
+      rank:2, level:3, story:"見積もりと交渉を任されてきた会社員。付箋だらけの帳簿はいつも正確。町で働ける間は、来訪者との契約交渉の評価に15を加える。",
+      invitation:"名声14以上で特別な来訪の候補になります。依頼を一件でも達成したギルドと契約します。",
+      letter:"サラリーマンのタナカから名刺が届いた。「初めまして。達成済みの依頼書を一枚拝見できますか。次の契約からお手伝いします」",
+      pledge:"達成済みの依頼書に目を通し、ギルドの交渉役を引き受けた。",
+      meet:s => fame(s) >= 14, join:s => s.history.some(r => r.success)},
+    shiina:{species:"human", age:23, name:"シイナ", job:"idol", trait:"bold", pronoun:"私", tone:"casual", ending:"",
+      rank:2, level:3, story:"街角を舞台に変える歌い手。町で活動できる週は広場で歌い、町にいる所属冒険者の士気を5、ギルドの満足度を2上げる。",
+      invitation:"名声19以上で特別な来訪の候補になります。満足度70以上の町で専属契約に応じます。",
+      letter:"アイドルのシイナが広場で歌っている。「みんなの好きな歌を教えて！　笑顔の集まるこの町を、私の舞台にしたいな」",
+      pledge:"広場に集まった笑顔に迎えられ、この町で歌い続けることにした。",
+      meet:s => fame(s) >= 19, join:s => s.metrics[3] >= 70},
+    goto:{species:"human", age:42, name:"ゴトウ", job:"chef", trait:"kind", pronoun:"俺", tone:"normal", ending:"",
+      rank:2, level:3, story:"旅の厨房を渡り歩いた料理人。町で働ける週は営業中の宿屋か食べ物屋でまかないを作る。町にいる所属冒険者のHP・MP回復率を10ポイント、満足度を2上げる。",
+      invitation:"名声10以上で特別な来訪の候補になります。宿屋か食べ物屋が営業していれば契約できます。",
+      letter:"料理人ゴトウが木のおたまを提げてやってきた。「宿か食堂のかまどを貸してくれ。帰ってきた連中に温かいものを出したいんだ」",
+      pledge:"町のかまどを預かり、冒険者の帰りをまかないで迎えることになった。",
+      meet:s => fame(s) >= 10, join:s => hasInn(s) || hasWorkingShop(s,"kitchen")}
   };
   const regularNames = ["ナギ","ベルタ","カイ","リタ","アオ","リゼ","ダン","エマ","ソラ","ユノ","レン","ネネ","トワ","イオ","メル","ジン","アニカ","セナ","キリ","ロイ"];
   function createRegistry(s) {
     const otherGuilds = [["海灯ギルド","波の子","潮読み","灯守"],["銀峰ギルド","山の芽","尾根歩き","峰守"]];
     const people = regularNames.map((name,i) => {
-      const p = makePerson("guest-"+i,name,startingJobs[i%startingJobs.length],Object.keys(traits)[Math.floor(i/3)%4],"私","normal");
+      const p = makePerson("guest-"+i,name,regularJobs[i%regularJobs.length],Object.keys(traits)[Math.floor(i/3)%4],"私","normal");
       p.rank = i%3;
       p.level = Math.max(p.level,p.rank+1);
       const guild = otherGuilds[i%otherGuilds.length];
       p.backstory = guild[0]+"で「"+guild[p.rank+1]+"」の階級を授かった。";
       return p;
     });
-    for (const [id,d] of Object.entries(uniqueGuests)) {
-      const p = makePerson(id,d.name,d.job,d.trait,d.pronoun,d.tone,"マスター",d.ending);
-      Object.assign(p,{rank:d.rank, level:Math.max(p.level,d.level), backstory:d.story});
-      people.push(p);
-    }
     return people.filter(p => !knownPerson(s,p.id));
   }
   function restoreGuildRegister(s) {
     s.ranks ??= {names:[...defaultRanks], focus:"practice", strictness:"standard", renown:0};
     s.registry ??= createRegistry(s);
+    for (const [id,d] of Object.entries(uniqueGuests)) {
+      if (knownPerson(s,id) || s.registry.some(p => p.id === id)) continue;
+      const p = makePerson(id,d.name,d.job,d.trait,d.pronoun,d.tone,"マスター",d.ending);
+      Object.assign(p,{rank:d.rank, level:Math.max(p.level,d.level), backstory:d.story});
+      s.registry.push(p);
+    }
     s.registry.forEach(restoreCharacter);
     s.market ??= {gold:0, herb:0, ore:0, returns:[]};
     s.milestones ??= [];
+    if (!s.uniqueVisitWeeks) {
+      s.uniqueVisitWeeks = {};
+      // Earlier saves recorded first letters and guest missions, but not each arrival.
+      for (const p of [...s.registry,...s.roster,...s.alumni]) {
+        if (!uniqueGuests[p.id]) continue;
+        if (s.visitors?.includes(p.id)) s.uniqueVisitWeeks[p.id] = s.week;
+        else {
+          for (const e of p.career) {
+            const joined = e.message?.startsWith(p.name+"が仲間になった。");
+            if (e.firstVisit || e.quest || joined) s.uniqueVisitWeeks[p.id] = e.week;
+            if (joined) break; // Later quests belong to a guild member, not a visitor.
+          }
+        }
+      }
+    }
     if (!s.visitors) welcomeVisitors(s);
   }
   function welcomeVisitors(s) {
@@ -1066,20 +1190,39 @@ const Guild = (() => {
     const count = Math.min(regulars.length, 1 + Math.floor(fame(s)/8) + (s.town.landmark === "exchange" ? 3 : 0));
     const newcomers = regulars.filter(p => !previous.has(p.id));
     const familiar = regulars.filter(p => previous.has(p.id));
-    s.visitors = [];
+    const duty = s.raids?.active?.assignments || s.raids?.warning?.assignments || {};
+    s.visitors = regulars.filter(p=>previous.has(p.id) && duty[p.id]).map(p=>p.id);
+    const returning = familiar.filter(p=>!s.visitors.includes(p.id));
     while (s.visitors.length < count) {
-      const pool = newcomers.length ? newcomers : familiar;
+      const pool = newcomers.length ? newcomers : returning;
       const [p] = pool.splice(Math.floor(Math.random()*pool.length),1);
       s.visitors.push(p.id);
     }
-    for (const p of s.registry) if (uniqueGuests[p.id]?.meet(s)) s.visitors.push(p.id);
+    // A guest assigned to guard duty stays until relieved. This is the same visit.
+    const guards = s.registry.filter(p => uniqueGuests[p.id] && previous.has(p.id) && duty[p.id]);
+    if (guards.length) {
+      s.visitors.push(...guards.map(p => p.id));
+      return;
+    }
+    const visits = s.uniqueVisitWeeks;
+    if (s.week - Math.max(0,...Object.values(visits)) < uniqueVisitInterval) return;
+    const candidates = s.registry.filter(p => uniqueGuests[p.id]?.meet(s));
+    candidates.sort((a,b) => (visits[a.id] || 0) - (visits[b.id] || 0));
+    const guest = candidates[0];
+    if (!guest) return;
+    const first = !visits[guest.id];
+    const message = first ? uniqueGuests[guest.id].letter : jobs[guest.job].name + guest.name + "が再びホールを訪れました。";
+    s.visitors.push(guest.id);
+    visits[guest.id] = s.week;
+    if (first) record(guest,s.week,message,{firstVisit:true});
+    s.morningMail.unshift({week:s.week,sender:guest.name,message,specialVisit:guest.id});
   }
   const visitorList = s => s.registry.filter(p => s.visitors.includes(p.id));
   function startGuestMissions(s) {
     if (s.town.repairs?.hall) return false;
     let changed = false;
     for (const p of visitorList(s)) {
-      if (p.mission) continue;
+      if (p.mission || p.injury || s.raids?.active || s.raids?.warning?.assignments?.[p.id]) continue;
       const eligible = postedQuests(s).filter(id => qualifies(s,p,quests[id].rank));
       const quest = eligible[Math.floor(Math.random()*eligible.length)];
       const dungeon = Object.keys(dungeons).filter(id => dungeonOpen(s,id) && qualifies(s,p,dungeonRank(id))).at(-1);
@@ -1145,16 +1288,18 @@ const Guild = (() => {
     return message;
   }
   const offers = {basic:{name:"支度金",gold:30}, generous:{name:"厚遇の支度金",gold:75}, premium:{name:"特別支度金",gold:150}};
+  const workingInTown = (s,id) => available(s,person(s,id)) && !awayMember(s,id);
   function scoutStatus(s,p,offer) {
     const unique = uniqueGuests[p.id];
     const price = offers[offer].gold;
-    const score = price + Math.floor(s.metrics[1]/2) + Math.min(40,fame(s)) + 8*(p.contacts || 0);
+    const negotiation = workingInTown(s,"tanaka") ? 15 : 0;
+    const score = price + Math.floor(s.metrics[1]/2) + Math.min(40,fame(s)) + 8*(p.contacts || 0) + negotiation;
     const accepts = score >= 65 + p.rank*18 + Math.min(12,p.level-1) + (unique ? 30 : 0);
     let reason = "";
     if (p.mission) reason = "依頼で遠征中です。";
     else if (unique && !unique.join(s)) reason = unique.invitation;
     else if (guildGold(s) < price) reason = "支度金が不足しています。";
-    return {reason,accepts,price};
+    return {reason,accepts,price,negotiation};
   }
   function scout(s,id,offer) {
     const p = visitorList(s).find(p => p.id === id);
@@ -1166,7 +1311,7 @@ const Guild = (() => {
     s.visitors = s.visitors.filter(v => v !== id);
     s.registry = s.registry.filter(v => v.id !== id);
     s.roster.push(p);
-    const message = p.name+"が仲間になった。専属契約を結び、所属冒険者になった。";
+    const message = p.name+"が仲間になった。"+(uniqueGuests[id]?.pledge || "専属契約を結び、所属冒険者になった。");
     record(p,s.week,message);
     s.milestones.unshift({week:s.week,message});
     checkGuildPromotion(s);
@@ -1218,7 +1363,8 @@ const Guild = (() => {
     return Math.max(1,Math.floor(value * (100-(p.frailty || 0))/100 * modifier));
   }
   const skillAxis = {ember:"magic",flare:"magic",renew:"magic",aid:"magic",prayer:"magic",ward:"spirit",
-    aim:"dex",volley:"dex",scout:"dex",wind:"dex"};
+    aim:"dex",volley:"dex",scout:"dex",wind:"dex",sealStrike:"spirit",shrinePrayer:"magic",
+    appraise:"dex",encore:"spirit",hotSoup:"dex"};
   function abilityPower(p,id,effect) {
     const power = abilities[id]?.[effect] || 0;
     const axis = skillAxis[id];
@@ -1446,6 +1592,25 @@ const Guild = (() => {
     recordJoining(p, s.week);
     s.gold -= hireCost(p); s.roster.push(p); delete s.candidate;
   }
+  function setAppearance(p, data) {
+    const sex = data.sex ?? p.sex, hair = data.hair ?? "";
+    check(["male","female","unspecified"].includes(sex),"性別を選んでください。");
+    check(hair === "" || Object.hasOwn(hairColors,hair),"髪色を選んでください。");
+    p.sex = sex;
+    if (hair && variantJob(data.job) && sex !== "unspecified") p.hair = hair;
+    else delete p.hair;
+  }
+  function editCustomAppearance(s, data) {
+    const p = trainingMember(s,"custom");
+    check(data.job === p.job || (startingJobs.includes(p.job) && startingJobs.includes(data.job)),
+      "現在の職業または登録できる下位職を選んでください。");
+    setAppearance(p,data);
+    if (p.job !== data.job) {
+      record(p,s.week,jobs[p.job].name+"から"+jobs[data.job].name+"に職業を変更。");
+      p.job = data.job;
+    }
+    if (p.portrait) p.useJobPortrait = !!data.useJobPortrait;
+  }
   function register(s, data) {
     check(!weekStarted(s), "登録はその週の最初の出発前にできます。"); check(!knownPerson(s, "custom"), "自作冒険者は1人までです。");
     const name = clean(data.name, 8);
@@ -1457,8 +1622,7 @@ const Guild = (() => {
     const skill = data.initialSkill ?? jobs[data.job].skills[0];
     check(jobs[data.job].skills.includes(skill), "職業の初期スキルを選んでください。");
     const p = makePerson("custom", name, data.job, data.trait, clean(data.pronoun, 12) || "私", data.tone, clean(data.master, 16) || "マスター", clean(data.ending, 12), {species:race,age}, skill);
-    check(["male","female","unspecified"].includes(data.sex ?? p.sex),"性別を選んでください。");
-    p.sex = data.sex ?? p.sex;
+    setAppearance(p,data);
     p.birthdayWeek = weekOfYear(calendarDate(s));
     p.backstory = String(data.backstory ?? "");
     setCharacterNames(p, data);
@@ -1531,12 +1695,13 @@ const Guild = (() => {
   const sample = values => values[Math.floor(Math.random()*values.length)];
   function familyJob(p) {
     return startingJobs.find(job => job === p.job || jobs[job].next === p.job) ||
-      ({swordmaster:"sword", princess:"guard"})[p.job] || "sword";
+      ({swordmaster:"sword", princess:"guard", exorcist:"thief", miko:"healer",
+        overlord:"warrior",salaryman:"thief",idol:"bard",chef:"apothecary"})[p.job] || "sword";
   }
   function familyAptitude(p) {
     const trained = Object.keys(statGains).filter(key => p.allocation?.[key] > 0);
     return trained.sort((a,b) => p.allocation[b]-p.allocation[a])[0] || p.aptitude ||
-      ({sword:"atk",guard:"def",healer:"spirit",hunter:"dex",mage:"magic",thief:"dex",druid:"spirit",beastmaster:"atk"})[familyJob(p)];
+      ({sword:"atk",guard:"def",healer:"spirit",hunter:"dex",mage:"magic",thief:"dex",druid:"spirit",beastmaster:"atk",warrior:"atk",fighter:"spd",bard:"spirit",apothecary:"dex"})[familyJob(p)];
   }
   function growFamilies(s) {
     for (const marriage of s.marriages) {
@@ -1846,14 +2011,14 @@ const Guild = (() => {
     log(t,message,{combat:event});
     (t.effects ??= []).push({...event,message});
   }
-  function chooseGambit(s,t,u,round) {
-    const p = person(s,u.id), f = t.fight;
+  function chooseGambit(s,t,u,round,p=person(s,u.id)) {
+    const f = t.fight;
     const allies = t.unit.filter(a => a.state === "ok"), enemies = f.enemies.filter(e => e.hp > 0);
     const covered = Object.values(f.covers);
     const coverable = allies.filter(a => a.id !== u.id && !covered.includes(a.id));
     const allyPool = (key,candidates=allies) => key === "lowest" ? candidates : candidates.filter(a =>
       a.id === (key === "self" ? u.id : key === "leader" ? t.leader : key));
-    const maxHP = a => a.kind ? foes[a.kind].hp : outfittedStat(s,person(s,a.id),"hp");
+    const maxHP = a => a.maxHP ?? (a.kind ? foes[a.kind].hp : outfittedStat(s,person(s,a.id),"hp"));
     for (const [i,r] of p.gambits.entries()) {
       const byRatio = r.hpOrder === "ratio";
       const candidates = byRatio && r.subject === "lowest" ? coverable : allies;
@@ -2056,10 +2221,22 @@ const Guild = (() => {
   }
   function suffer(s,t,u,kind,source) {
     const p = person(s,u.id);
+    if (kind === "curse" && jobs[p.job].curseWard) {
+      log(t,p.name+"は封じ札で"+source+"の呪いを祓った。");
+      return;
+    }
     if (kind === "pregnancy") {
       p.recovery[kind] = s.week + debuffs[kind].duration;
       delete p.treatment[kind];
     } else if (Object.hasOwn(p.debuffs,kind)) return;
+    if (kind === "curse" || kind === "burden") {
+      const priestess = t.unit.find(ally => ally.state === "ok" && ally.mp >= 2 && jobs[person(s,ally.id).job].purifies);
+      if (priestess) {
+        priestess.mp -= 2;
+        log(t,person(s,priestess.id).name+"の御幣が"+p.name+"を包み、"+debuffs[kind].name+"を祓った。");
+        return;
+      }
+    }
     p.debuffs[kind] = 0;
     u.mp = Math.min(u.mp,maxMP(p));
     const until = p.recovery[kind] ? "。第"+p.recovery[kind]+"週まで療養" : "";
@@ -2353,12 +2530,14 @@ const Guild = (() => {
     team.wallet += partyReward - share + partyRefund;
     s.gold += reward - share - a.wages + refund;
     const xp = 2 + 2 * t.wins + (success ? 4 : 0) + facilityTotals(s.town).experience;
+    const commanded = t.leader === "jobava" && t.unit.some(u => u.id === t.leader && u.state === "ok");
     for (const u of t.unit) {
       const p = person(s, u.id);
       if (u.state === "lost") { log(t,leaveRoster(s,p,"lost")); continue; }
       const encouraged = t.unit.some(ally => ally !== u && ally.state === "ok" && affinity(s,ally.id,u.id) >= 40);
       const moraleBefore = p.morale;
-      p.morale = boundedScore(moraleBefore + Number(encouraged) + (success ? 6 : -4) - (u.state === "ok" ? 0 : 4));
+      const commandBonus = commanded && u.id !== t.leader ? 4 : 0;
+      p.morale = boundedScore(moraleBefore + Number(encouraged) + commandBonus + (success ? 6 : -4) - (u.state === "ok" ? 0 : 4));
       u.moraleChange = p.morale - moraleBefore;
       p.missingHP = Math.max(0,outfittedStat(s,p,"hp") - u.hp);
       p.spentMP = maxMP(p) - u.mp;
@@ -2472,6 +2651,10 @@ const Guild = (() => {
       if (team.phase !== "prep" || team.decisionWeek === s.week || !team.party.length) continue;
       const members = team.party.map(id => person(s,id)), leader = person(s,team.leader);
       if (!leader) continue;
+      if (s.raids.active || team.party.some(id=>s.raids.warning?.assignments?.[id])) {
+        plans.push({team,message:leader.name+"より「町の守備につきます。」"});
+        continue;
+      }
       const cautious = leader.trait !== "bold", priority = team.priority;
       const tired = members.some(p => !available(s,p) || currentHP(s,p) < outfittedStat(s,p,"hp") * (cautious ? .65 : .45) ||
         currentMP(p) < maxMP(p) * (cautious ? .35 : .2));
@@ -2547,19 +2730,94 @@ const Guild = (() => {
   };
   const plaza = [635,470,"hall"];
   const westPlaza = [[554,436],[596,452],plaza];
-  const territoryRoads = {
+  const oldTerritoryRoads = {
     west:[...approaches.west,...raidRoads.west.slice(0,8),...westPlaza],
     east:[...approaches.east,...raidRoads.east.slice(0,10),[646,398],[646,433],plaza],
     north:[...approaches.north,...raidRoads.north.slice(0,3),[378,182],[394,189],...raidRoads.north.slice(3,14),...westPlaza],
     riverside:[...approaches.riverside,...raidRoads.riverside.slice(0,7),[680,488],plaza],
     south:[...approaches.south,...raidRoads.south.slice(0,5),plaza]
   };
-  const raidRoute = raid => (raid.outer ? territoryRoads : raidRoads)[raid.road];
+  const switchbacks = {
+    west:[[-380,424],[-348,413],[-306,415],[-282,395],[-292,373],[-343,356],[-367,333]],
+    east:[[1756,452],[1730,425],[1678,419],[1656,393],[1674,365],[1720,348],[1730,307]],
+    north:[[750,-156],[775,-132],[820,-120],[858,-130],[876,-149],[908,-144]],
+    riverside:[[1414,794],[1371,779],[1346,747],[1311,735],[1288,757],[1306,790],[1310,821]],
+    south:[[685,937],[652,912],[615,893],[574,901],[557,922],[513,925],[491,905]]
+  };
+  const territoryRoads = Object.fromEntries(Object.entries(oldTerritoryRoads).map(([id,path])=>[id,[...switchbacks[id],...path]]));
+  const raidRoute = raid => (raid.routeVersion === 2 ? territoryRoads : raid.outer ? oldTerritoryRoads : raidRoads)[raid.road];
+  const defenseTypes = {
+    watch:{range:185,power:8,interval:2,hp:14,options:["fire","range","rapid"],effect:"中射程の単体射撃"},
+    bow:{range:310,power:20,interval:4,hp:12,options:["boss","range","rapid"],effect:"長射程・高威力の単体射撃"},
+    magic:{range:155,power:6,interval:3,hp:12,splash:90,options:["aura","range","boss"],effect:"着弾点の周囲90以内を範囲攻撃"},
+    wall:{range:78,power:0,interval:1,hp:20,options:["aura","range"],effect:"範囲に入った敵を一度足止め"}
+  };
+  const defenseOptions = {
+    fire:{name:"火矢",effect:"命中後、2拍にわたり3ずつ追加ダメージ",cost:1500},
+    range:{name:"射程延長",effect:"射程・効果範囲＋60",cost:1400},
+    rapid:{name:"連射機構",effect:"射撃間隔を1拍短縮",cost:1900},
+    boss:{name:"対ヌシ特効",effect:"ヌシへの威力が2倍",cost:1800},
+    aura:{name:"鈍足のオーラ",effect:"効果範囲内の敵を一度、追加で1拍足止め",cost:1600}
+  };
+  const newDefense = kind => ({level:1,hp:defenseTypes[kind].hp,option:null});
+  function defenseStats(s,site,kind=s.town.plots[site]) {
+    const spec = defenseTypes[kind];
+    const {level,hp,option} = s.town.defenses[site] || newDefense(kind);
+    return {...spec,level,hp,option,maxHP:spec.hp+8*(level-1),
+      range:spec.range+20*(level-1)+(option==="range" ? 60 : 0)+(s.town.landmark==="observatory" ? 40 : 0),
+      power:spec.power && spec.power+4*(level-1), interval:spec.interval-Number(option==="rapid"),
+      delay:1+level,upgradeCost:level<5 ? buildings[kind].cost*(level+1) : 0};
+  }
+  function improveDefense(s,site,option) {
+    const kind = s.town.plots[site], spec = defenseTypes[kind];
+    check(spec && !s.town.repairs[site] && !s.raids.active,"稼働中の防衛施設を平時に選んでください。");
+    const stats = defenseStats(s,site), facility = s.town.defenses[site];
+    if (option === undefined) {
+      check(stats.upgradeCost,"レベルは上限です。");
+      spend(s,null,stats.upgradeCost);
+      facility.level++;
+      facility.hp += 8;
+    } else {
+      check(spec.options.includes(option) && stats.option!==option,"新しく取り付ける効果を選んでください。");
+      spend(s,null,defenseOptions[option].cost);
+      facility.option = option;
+    }
+  }
+  const distanceOnMap = (a,b) => Math.hypot(a[0]-b[0],2*(a[1]-b[1]));
+  const guardPosts = {front:"街道の要点",gate:"町の入口",plaza:"広場・ホール（最終ライン）"};
+  function guardPost(r,p,index) {
+    const key = r.assignments?.[p.id] || (index%4===3 ? "gate" : "plaza");
+    return {key,step:guardStep(r,key)};
+  }
+  function guardStep(r,key) {
+    const road = raidRoute(r);
+    return key==="front" ? Math.max(1,road.findIndex(stop=>plotForSite(stop[2])?.road)) :
+      key==="gate" ? Math.max(1,road.length-7) : road.length-1;
+  }
+  function assignGuard(s,id,post) {
+    const warning = s.raids.warning;
+    check(warning?.routeVersion===2 && raidDefenders(s).some(p=>p.id===id),"予告中に町にいる守備隊員を選んでください。");
+    check(post==="auto" || Object.hasOwn(guardPosts,post),"守備位置を選んでください。");
+    warning.assignments ??= {};
+    if (post==="auto") delete warning.assignments[id];
+    else warning.assignments[id] = post;
+  }
+  function terrainAt(stop) {
+    if (stop[2]==="upperBridge" || (stop[0]===881 && stop[1]===265)) return "橋";
+    return ["westPass","eastRidge","northSaddle","riverTurn","southFork"].includes(stop[2]) ? "隘路" : "";
+  }
   const roadNames = {west:"西街道", east:"東街道", north:"北の丘道", riverside:"川沿いの道", south:"南門"};
   const raidBeat = 2500;
   function restoreRaids(s) {
     s.raids ??= {nextWeek:Math.max(4,s.week+1), peak:0, warning:null, active:null, reports:[]};
     s.town.repairs ??= {};
+    s.town.defenses ??= {};
+    for (const [site,kind] of Object.entries(s.town.plots)) {
+      if (defenseTypes[kind] && !s.town.defenses[site]) {
+        const facility = s.town.defenses[site] = newDefense(kind);
+        if (s.town.repairs[site]) facility.hp = 0;
+      }
+    }
   }
   function forecastIfDue(s) {
     const observed = s.town.landmark === "observatory";
@@ -2573,7 +2831,7 @@ const Guild = (() => {
     const tier = s.raids.peak = Math.max(s.raids.peak,Math.floor(growth/8));
     const surprise = s.raids.reports.length > 0 && Math.random() < .08;
     const roads = Object.keys(raidRoads);
-    const plan = {outer:!!s.town.outerTerritory, road:roads[Math.floor(Math.random()*roads.length)], tier, surprise,
+    const plan = {routeVersion:2, outer:true, road:roads[Math.floor(Math.random()*roads.length)], tier, surprise,
       count:surprise ? 2+Math.floor(tier/2) : 3+tier, boss:s.raids.reports.length>0 && Math.random()<.12,
       due:surprise ? 0 : Math.round(weekMillis*3/7)};
     if (observed) {
@@ -2585,34 +2843,45 @@ const Guild = (() => {
   }
   function beginRaid(s,plan) {
     const enemies = Array.from({length:plan.count}, (_,i) => {
-      const boss = plan.boss && i === plan.count-1;
+      const boss = !!plan.boss && i === plan.count-1;
       const hp = (boss ? 24 : 10) + plan.tier*2;
-      return {hp,maxHP:hp,boss,step:-i};
+      return {hp,maxHP:hp,boss,step:-i,...(plan.routeVersion === 2 ? {id:"foe-"+i,kind:boss ? "warden" : "boar"} : {})};
     });
     s.raids.warning = null;
     s.raids.active = {...plan,knights:s.town.landmark === "castle",enemies,elapsed:0,hits:[],damaged:[],injured:[],gold:0,food:0,discontent:0};
+    if (plan.routeVersion===2) {
+      const r = s.raids.active;
+      Object.assign(r,{round:0,ready:{},patched:{},withdrawn:{},posts:{},contributions:{},assignments:{...plan.assignments}});
+      raidDefenders(s).forEach((p,i)=>{ r.assignments[p.id] = guardPost(r,p,i).key; });
+    }
   }
   function raidDefenders(s) {
     const home = s.roster.filter(p => !awayMember(s,p.id));
-    return home.concat(visitorList(s).filter(p => !p.mission)).filter(p => !p.injury && !p.recovery?.pregnancy && currentHP(s,p)>0);
+    return home.concat(visitorList(s).filter(p => !p.mission)).filter(p => !s.raids.active?.withdrawn?.[p.id] && !p.injury && !p.recovery?.pregnancy && currentHP(s,p)>0);
   }
   function raidPost(road,index) {
     return Math.max(1, road.length-3-index%4);
   }
   function repairQuote(s,id) {
-    check(Object.hasOwn(s.town.repairs,id),"修理する建物を選んでください。");
+    const facility = s.town.defenses[id];
+    const worn = facility && facility.hp<defenseStats(s,id).maxHP;
+    check(Object.hasOwn(s.town.repairs,id) || worn,"修理する建物を選んでください。");
     const hands = Object.entries(s.town.workshops).reduce((total,[site,shop]) =>
       total + (site==="hall" && s.town.smithReadyWeek>s.week ? 0 : shop.level-1),0);
     const severity = id === "hall" ? 2 : 1;
-    return {local:hands>0,cost:Math.ceil(36*severity/(1+hands*.6)),
+    const price = Math.ceil(36*severity/(1+hands*.6));
+    const subsidy = Math.min(price,s.town.repairFund || 0);
+    return {local:hands>0,cost:price-subsidy,subsidy,
       weeks:Math.max(1,3+severity-hands), chance:Math.min(1,.65+.12*hands)};
   }
   function startRepair(s,id) {
-    check(Object.hasOwn(s.town.repairs,id) && !s.town.repairs[id].remaining,"修理待ちの建物を選んでください。");
+    check(!s.town.repairs[id]?.remaining,"修理待ちの建物を選んでください。");
     const quote = repairQuote(s,id);
+    check(!s.town.defenses[id] || !s.raids.active,"防衛施設の修理は襲撃後に発注できます。");
     check(guildGold(s)>=quote.cost,"修理資金が足りません。");
     s.gold -= quote.cost;
-    Object.assign(s.town.repairs[id],{remaining:quote.weeks,chance:quote.chance,delayed:false});
+    if (quote.subsidy) s.town.repairFund -= quote.subsidy;
+    s.town.repairs[id] = {remaining:quote.weeks,chance:quote.chance,delayed:false};
   }
   function progressRepairs(s) {
     for (const [id,job] of Object.entries(s.town.repairs)) {
@@ -2620,13 +2889,17 @@ const Guild = (() => {
       if (!job.delayed && Math.random()>=job.chance) {
         job.remaining = 1;
         job.delayed = true;
-      } else delete s.town.repairs[id];
+      } else {
+        delete s.town.repairs[id];
+        if (s.town.defenses[id]) s.town.defenses[id].hp = defenseStats(s,id).maxHP;
+      }
     }
   }
   function raidDamage(s,r,id) {
     if (!id || (id!=="hall" && !s.town.plots[id]) || r.damaged.includes(id)) return;
     r.damaged.push(id);
     const job = s.town.repairs[id] ??= {remaining:0};
+    if (s.town.defenses[id]) s.town.defenses[id].hp = 0;
     if (job.remaining) job.remaining++;
     const severity = id==="hall" ? 3 : 1;
     const gold = Math.min(Math.max(0,guildGold(s)),severity*(8+r.tier));
@@ -2658,13 +2931,191 @@ const Guild = (() => {
     s.raids.credit = (s.raids.credit || 0) + credit;
     if (herb) s.milestones.unshift({week:s.week,message:roadNames[r.road]+"で襲撃のヌシを討伐。町の防衛の偉業として記す。"});
     const {road,surprise,count,damaged,injured,gold,food,discontent} = r;
-    s.raids.reports.unshift({week:s.week,road,surprise,count,damaged,injured,gold,food,discontent,ore,herb,credit,repelled,knights:!!r.knights});
+    const subsidy = s.town.landmark==="exchange" && damaged.length ? 72 : 0;
+    if (subsidy) s.town.repairFund = (s.town.repairFund || 0)+subsidy;
+    s.raids.reports.unshift({contributions:r.contributions || {},landmark:s.town.landmark,subsidy,week:s.week,road,surprise,count,damaged,injured,gold,food,discontent,ore,herb,credit,repelled,knights:!!r.knights});
     recordRaidFeats(s,s.raids.reports[0]);
     checkGuildPromotion(s);
     s.raids.active = null;
     s.raids.nextWeek = s.week + 3 + Math.floor(Math.random()*3);
   }
+  function contribution(r,id,name,post) {
+    return r.contributions[id] ??= {name,post,damage:0,kills:0,delay:0,support:0};
+  }
+  function raidStrike(r,id,record,enemy,power,label) {
+    const amount = Math.min(enemy.hp,power);
+    enemy.hp -= amount;
+    record.damage += amount;
+    if (!enemy.hp) record.kills++;
+    r.hits.push({source:id,target:r.enemies.indexOf(enemy),label});
+  }
+  function delayEnemy(r,id,record,enemy,beats) {
+    (enemy.delays ??= {});
+    if (enemy.delays[id]) return;
+    enemy.delays[id] = true;
+    enemy.wait = (enemy.wait || 0) + beats;
+    record.delay += beats;
+    r.hits.push({source:id,target:r.enemies.indexOf(enemy),label:"足止め"});
+  }
+  function defendWithFacilities(s,r,road,invaders) {
+    for (const [site,facility] of Object.entries(s.town.defenses)) {
+      if (s.town.repairs[site]) continue;
+      const kind = s.town.plots[site], spec = defenseStats(s,site);
+      const center = defenseCenter(site,s.town.plots), place = plotForSite(site);
+      const record = contribution(r,site,buildings[kind].name,place.name);
+      const nearby = invaders.filter(e=>e.hp && distanceOnMap(center,road[e.step])<=spec.range);
+      if (!nearby.length) continue;
+      const target = nearby[0];
+      if (kind==="wall" || spec.option==="aura") {
+        for (const e of nearby) delayEnemy(r,site,record,e,(kind==="wall" ? spec.delay : 0)+Number(spec.option==="aura")+Number(!!terrainAt(road[e.step])));
+      }
+      if (spec.power && (r.ready[site] || 0)<=r.round) {
+        const targets = kind==="magic" ? invaders.filter(e=>e.hp && distanceOnMap(road[target.step],road[e.step])<=spec.splash) : [target];
+        for (const e of targets) {
+          const power = spec.power*(e.boss && spec.option==="boss" ? 2 : 1) + (terrainAt(road[e.step]) ? 2 : 0);
+          raidStrike(r,site,record,e,power,kind==="magic" ? "範囲攻撃" : "射撃");
+          if (e.hp && spec.option==="fire") e.burn = {site,beats:2};
+        }
+        r.ready[site] = r.round+spec.interval;
+      }
+      for (const e of nearby) {
+        if (!e.hp || distanceOnMap(center,road[e.step])>78 || e.contacted?.includes(site)) continue;
+        (e.contacted ??= []).push(site);
+        facility.hp = Math.max(0,facility.hp-(4+r.tier+Number(e.boss)*3));
+        if (s.town.landmark==="manufactory" && !r.patched[site]) {
+          r.patched[site] = true;
+          facility.hp = Math.min(spec.maxHP,facility.hp+8);
+          contribution(r,"manufactory",landmarks.manufactory.name,place.name).support++;
+        }
+        if (!facility.hp) {
+          s.town.repairs[site] = {remaining:0};
+          if (!r.damaged.includes(site)) r.damaged.push(site);
+          break;
+        }
+      }
+    }
+  }
+  function defendAtPost(s,r,key,members,enemies) {
+    if (!members.length || !enemies.length) return;
+    const fight = r.posts[key] ??= {round:0,covers:{},guards:{},haste:{},shaken:{}};
+    fight.round++;
+    const unit = members.map(p=>({id:p.id,hp:currentHP(s,p),mp:currentMP(p),maxHP:outfittedStat(s,p,"hp"),state:"ok"}));
+    const leader = unit.find(u=>u.id===s.leader) || unit[0];
+    const team = {unit,leader:leader.id,meds:s.supplies.medicine,fight:{...fight,enemies}};
+    const getPerson = id => members.find(p=>p.id===id);
+    unit.sort((a,b)=>(outfittedStat(s,getPerson(b.id),"spd")+(fight.haste[b.id] || 0))-
+      (outfittedStat(s,getPerson(a.id),"spd")+(fight.haste[a.id] || 0)));
+    for (const u of unit) {
+      const nearest = enemies.find(e=>e.hp);
+      if (!nearest) break;
+      const p = getPerson(u.id), record = contribution(r,u.id,p.name,guardPosts[key]);
+      delete fight.covers[u.id];
+      const pick = p.gambits?.length && chooseGambit(s,team,u,fight.round,p);
+      const action = pick?.action || "attack", target = pick?.target || nearest, skill = abilities[action];
+      record.lastAction = (pick ? "オーダー"+pick.rule+" ・ " : "")+(skill?.name || actions[action]);
+      if (action==="flee") {
+        r.withdrawn[p.id] = true;
+        u.state = "retired";
+        continue;
+      }
+      if (skill || ["heal","cleanse"].includes(action)) {
+        p.spentMP += s.town.landmark==="baths" ? 1 : 2;
+        u.mp = currentMP(p);
+      }
+      if (action==="attack" || skill?.atk) {
+        const attack = outfittedStat(s,p,"atk")*(s.wielder===p.id ? bladeMultiplier(s.weaponQuality) : 1);
+        const power = Math.max(1,Math.ceil(attack/2)-(fight.shaken[p.id] ? 2 : 0))+abilityPower(p,action,"atk")+
+          (s.town.landmark==="memorial" ? 3 : 0)+(s.town.landmark==="academy" && pick ? 4 : 0);
+        raidStrike(r,p.id,record,target,power,record.lastAction);
+      } else {
+        record.support++;
+        if (action==="cover") fight.covers[p.id] = target.id;
+        if (action==="cleanse") delete fight.shaken[target.id];
+        if (skill?.def) fight.guards[target.id] = abilityPower(p,action,"def");
+        if (skill?.spd) fight.haste[target.id] = abilityPower(p,action,"spd");
+        if (action==="heal" || action==="medicine" || skill?.heal) {
+          let power = abilityPower(p,action,"heal") || 4;
+          if (action==="medicine") {
+            const kit = packSupplies(s,null,"medicine",1);
+            power = supplyPower("medicine",kit[0].quality);
+            team.meds--;
+          }
+          const patient = getPerson(target.id);
+          patient.missingHP = Math.max(0,patient.missingHP-power);
+          target.hp = currentHP(s,patient);
+        }
+      }
+    }
+    for (const e of enemies.filter(e=>e.hp)) {
+      const available = unit.filter(u=>u.state==="ok" && u.hp>0);
+      const intended = available.sort((a,b)=>a.hp-b.hp)[0];
+      if (!intended) break;
+      const u = available.find(a=>fight.covers[a.id]===intended.id) || intended;
+      const p = getPerson(u.id);
+      const hit = Math.max(1,7+r.tier+(e.boss ? 5 : 0)-Math.floor(outfittedStat(s,p,"def")/3)-
+        (fight.guards[p.id] || 0)-(s.town.landmark==="baths" ? 2 : 0));
+      p.missingHP += Math.min(u.hp,hit);
+      u.hp = currentHP(s,p);
+      if (!u.hp) {
+        r.withdrawn[p.id] = true;
+        if (!r.injured.includes(p.name)) r.injured.push(p.name);
+        p.readyWeek = Math.max(p.readyWeek || 0,s.week+2);
+        p.injury = {kind:"防衛戦で負傷",readyWeek:p.readyWeek};
+      } else if (e.boss) fight.shaken[p.id] = true;
+    }
+    if (s.town.landmark==="cathedral") for (const u of unit.filter(u=>u.hp && u.state==="ok")) {
+      const p = getPerson(u.id);
+      if (p.missingHP) {
+        p.missingHP = Math.max(0,p.missingHP-3);
+        contribution(r,"cathedral",landmarks.cathedral.name,guardPosts[key]).support++;
+      }
+    }
+  }
+  function defenseRound(s,r) {
+    const road = raidRoute(r), last = road.length-1;
+    r.round++;
+    r.hits = [];
+    const live = r.enemies.filter(e=>e.hp && !e.escaped && e.step>=0).sort((a,b)=>b.step-a.step);
+    for (const e of live) {
+      if (!e.burn?.beats) continue;
+      raidStrike(r,e.burn.site,r.contributions[e.burn.site],e,3,"火矢");
+      e.burn.beats--;
+    }
+    defendWithFacilities(s,r,road,live.filter(e=>e.step<last));
+    const allies = raidDefenders(s);
+    allies.forEach((p,i)=>{ r.assignments[p.id] ??= guardPost(r,p,i).key; });
+    for (const key of ["front","gate","plaza"]) {
+      const members = allies.filter(p=>r.assignments[p.id]===key);
+      const step = guardStep(r,key);
+      const enemies = live.filter(e=>e.hp && (key==="plaza" ? e.step===last : Math.abs(step-e.step)<=1));
+      defendAtPost(s,r,key,members,enemies);
+    }
+    const reinforcements = [
+      [r.knights,"knights","騎士団",16+r.tier,Math.floor(last/2),Math.ceil(last/2)],
+      [s.town.landmark==="exchange","mercenaries","交易会館の傭兵",7,last,2],
+      [s.town.ward,"hall","ホールの加護",s.town.ward,last,3]
+    ];
+    for (const [enabled,id,name,power,step,range] of reinforcements) {
+      const enemy = enabled && live.find(e=>e.hp && Math.abs(e.step-step)<=range);
+      if (enemy) raidStrike(r,id,contribution(r,id,name,id==="knights" ? "街道" : "広場"),enemy,power,"迎撃");
+    }
+    const finalGuard = raidDefenders(s).some(p=>r.assignments[p.id]==="plaza");
+    for (const e of r.enemies) {
+      if (!e.hp || e.escaped) continue;
+      e.previousStep = e.step;
+      if (e.wait) { e.wait--; continue; }
+      if (e.step < last) { e.step++; continue; }
+      if (finalGuard) continue;
+      e.escaped = true;
+      for (const stop of road) for (const site of plotForSite(stop[2])?.sites || []) {
+        if (!s.town.defenses[site]) raidDamage(s,r,site);
+      }
+      raidDamage(s,r,"hall");
+    }
+    if (r.enemies.every(e=>!e.hp || e.escaped)) finishRaid(s,r);
+  }
   function raidRound(s,r) {
+    if (r.routeVersion === 2) return defenseRound(s,r);
     const road = raidRoute(r), last = road.length-1;
     r.hits = [];
     const attack = (source,power,at,radius) => {
@@ -2676,9 +3127,10 @@ const Guild = (() => {
     for (const [id,kind] of Object.entries(s.town.plots)) {
       const power = buildings[kind].defense;
       if (!power || s.town.repairs[id]) continue;
-      const post = road.findIndex(stop => stop[2]===id);
+      const plot = plotForSite(id);
+      const post = road.findIndex(stop => stop[2]===plot.id);
       // Only the town-center defenses can cover the plaza from another street.
-      if (post<0 && outerPlots.some(p=>p.id===id)) continue;
+      if (post<0 && plot.road) continue;
       attack(id,power,post<0 ? last-2 : post,kind==="wall" ? 1 : 3);
     }
     if (r.knights) attack("knights",16+r.tier,Math.floor(last/2),Math.ceil(last/2));
@@ -2688,7 +3140,10 @@ const Guild = (() => {
     for (const enemy of r.enemies) {
       if (enemy.hp<=0 || enemy.step===last) continue;
       enemy.step++;
-      if (enemy.step>=0) raidDamage(s,r,road[enemy.step][2]);
+      if (enemy.step>=0) {
+        const stop = road[enemy.step][2];
+        for (const site of plotForSite(stop)?.sites || [stop]) raidDamage(s,r,site);
+      }
     }
     if (r.enemies.every(e => !e.hp || e.step===last)) finishRaid(s,r);
   }
@@ -2714,6 +3169,8 @@ const Guild = (() => {
   function raidRecall(s,team) {
     check(s.raids.active && parties(s).includes(team) && team.phase==="explore","襲撃中に遠征隊を呼び戻せます。");
     settle(s,team,"町の防衛のため緊急帰還");
+    const r = s.raids.active;
+    if (r?.routeVersion===2) raidDefenders(s).forEach((p,i)=>{ r.assignments[p.id] ??= guardPost(r,p,i).key; });
   }
   function nextWeek(s, work = false) {
     check(!anyAway(s) || (!work && parties(s).some(team => team.trip?.pending)), "全隊の帰還を待ってください。");
@@ -2751,6 +3208,8 @@ const Guild = (() => {
     s.gold += yields.income;
     s.metrics[0] = Math.min(100, s.metrics[0] + yields.strength);
     const residents = s.roster.filter(p => !awayMember(s,p.id));
+    const concert = workingInTown(s,"shiina");
+    const meal = workingInTown(s,"goto") && (hasInn(s) || hasWorkingShop(s,"kitchen"));
     if (yields.morale) {
       const patrons = [...residents,...s.alumni.filter(p => p.departure.kind === "retired")];
       eachPair(patrons.map(p => p.id),(a,b) => bondTime(s,a,b,2));
@@ -2767,13 +3226,15 @@ const Guild = (() => {
     const retiredOnLeave = s.alumni.filter(p => p.departure.kind === "retired" && familyLeave.has(p.id));
     if (s.town.landmark === "memorial")
       for (const p of s.roster) p.morale = boundedScore(p.morale+6);
-    for (const p of [...residents,...retiredOnLeave]) {
+    const recoveringGuests = s.registry.filter(p=>p.injury || p.missingHP || p.spentMP);
+    for (const p of [...residents,...retiredOnLeave,...recoveringGuests]) {
       if (s.town.landmark === "baths" && p.injury && p.readyWeek > s.week+1) {
         p.readyWeek--;
         p.injury.readyWeek = p.readyWeek;
       }
-      p.morale = boundedScore(p.morale + (p.departure ? 0 : yields.morale) + (familyLeave.has(p.id) ? 2 : 0));
-      const rate = ((p.leaveWeek === s.week || familyLeave.has(p.id) ? 55 : 20) + yields.recovery) / 100;
+      const resident = residents.includes(p);
+      p.morale = boundedScore(p.morale + (p.departure ? 0 : yields.morale) + (familyLeave.has(p.id) ? 2 : 0) + (concert && resident ? 5 : 0));
+      const rate = ((p.leaveWeek === s.week || familyLeave.has(p.id) ? 55 : 20) + yields.recovery + (meal && resident ? 10 : 0)) / 100;
       p.missingHP = Math.max(0,p.missingHP - Math.ceil(outfittedStat(s,p,"hp") * rate));
       p.spentMP = Math.max(0,p.spentMP - Math.ceil(maxMP(p) * rate));
       if (p.injury && p.readyWeek <= s.week+1) {
@@ -2783,7 +3244,7 @@ const Guild = (() => {
     }
     if (residents.length) {
       const mood = residents.reduce((sum,p) => sum + moraleBand(p),0);
-      s.metrics[3] = boundedScore(s.metrics[3] + Math.sign(mood) + yields.satisfaction);
+      s.metrics[3] = boundedScore(s.metrics[3] + Math.sign(mood) + yields.satisfaction + (concert ? 2 : 0) + (meal ? 2 : 0));
     }
     settleGuestMissions(s);
     s.week++;
@@ -2811,11 +3272,11 @@ const Guild = (() => {
     }
     expireCalls(s);
   }
-  return { partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
+  return { variantJob, variantJobs, hairColors, characterArt, editCustomAppearance, defenseSpots, allPlots, plotCapacity, pairedPads, defenseCenter, defenseTypes, defenseStats, defenseOptions, improveDefense, guardPosts, guardPost, assignGuard, terrainAt, partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
-    orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, buildings, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
+    orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, plotForSite, buildings, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
     payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, hire, register, estimate, depart, step, choices, reply,
     returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile, maxTributeRate,
     nextDay:nextWeek, dayStarted:weekStarted, dayMillis:weekMillis };

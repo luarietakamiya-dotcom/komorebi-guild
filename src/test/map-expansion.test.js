@@ -69,6 +69,7 @@ test("街道沿いの塔は外周で迎撃し、旧区画の工房・報酬・�
   t.mock.method(Math,"random",()=>.1);
   const reload = s=>G.restore(JSON.parse(JSON.stringify(s)));
   const s = G.initial();
+  s.gold += G.buildings.magic.cost;
   G.build(s,"west","shop","alchemy");
   G.build(s,"westPass","magic");
   G.nextWeek(s,true);
@@ -78,6 +79,7 @@ test("街道沿いの塔は外周で迎撃し、旧区画の工房・報酬・�
   assert.equal(s.raids.warning.road,"west");
   G.holdDeparture(s);
   G.advanceTime(s,s.raids.warning.due+G.raidBeat);
+  for (let beat=0;beat<12 && !s.raids.active.hits.some(hit=>hit.source==="westPass");beat++) G.advanceTime(s,G.raidBeat);
   assert.ok(s.raids.active.hits.some(hit=>hit.source==="westPass"));
   const restored = reload(s);
   G.advanceTime(s,80000);
@@ -91,6 +93,7 @@ test("街道沿いの塔は外周で迎撃し、旧区画の工房・報酬・�
 test("旧セーブの予告・進行中の敵は領地を拡張しても旧街道の同じ地点から続く", () => {
   const s = G.initial();
   s.raids.warning = {road:"west",tier:0,count:3,boss:false,surprise:false,due:100};
+  s.gold += G.buildings.bow.cost;
   G.build(s,"eastTurn","bow");
   G.advanceTime(s,100+G.raidBeat);
   const restored = G.restore(JSON.parse(JSON.stringify(s)));

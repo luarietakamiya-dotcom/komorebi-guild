@@ -73,9 +73,11 @@ test("水彩の建物は原画をそのまま描き、透明な余白をタッ�
 
 test("町のキャンバスに侵入路を進む魔物、持ち場の仲間、塔の迎撃を描く", async () => {
   const Guild = require("../engine.js"), state = Guild.initial();
+  state.gold += Guild.buildings.bow.cost;
   Guild.build(state,"west","bow");
   while (!state.raids.warning) Guild.nextWeek(state,true);
   state.raids.warning.road="west";
+  delete state.raids.warning.routeVersion; state.raids.warning.outer=false; // Watercolor save
   Guild.holdDeparture(state);
   Guild.advanceTime(state,state.raids.warning.due);
   let frame, fraction=0;
@@ -108,5 +110,45 @@ test("町のキャンバスに侵入路を進む魔物、持ち場の仲間、�
   assert.ok(state.raids.active.hits.some(h=>h.source==="west"));
   fraction=.1; frame(2);
   assert.ok(lines.length);
+  stop();
+});
+
+test("立体地形の守備位置・射線・射程が戦闘と同じ座標で描かれ、足止め中の敵は移動しない", async ()=>{
+  const Guild=require("../engine.js"), s=Guild.initial();
+  s.gold=10000; s.visitors=[];
+  Guild.build(s,"westPass","wall");
+  s.raids.warning={routeVersion:2,outer:true,road:"west",count:1,tier:2,due:1};
+  Guild.assignGuard(s,"mina","front");
+  Guild.holdDeparture(s);
+  Guild.advanceTime(s,1);
+  const raid=s.raids.active, road=Guild.raidRoute(raid), step=Guild.guardPost(raid,s.roster[0],0).step;
+  Object.assign(raid.enemies[0],{step,hp:80,maxHP:80});
+  Guild.advanceTime(s,Guild.raidBeat);
+  const stamps=[], labels=[], rings=[];
+  let frame, fraction=.2;
+  const ctx=new Proxy({fillText:t=>labels.push(t),ellipse:(...a)=>rings.push(a)}, {get:(o,k)=>o[k] ?? (()=>{})});
+  const canvas={dataset:{scene:"town"},getContext:()=>ctx,clientWidth:1393,closest:()=>({clientWidth:900})};
+  const box=vm.createContext({Guild,document:{createElement:()=>({getContext:()=>ctx})},
+    requestAnimationFrame(fn){frame=fn;return 1;},cancelAnimationFrame(){},
+    GuildStacks:{draw(_ctx,id,_url,x,y){stamps.push({id,x,y});}},window:{matchMedia:()=>({matches:false})}});
+  for (const file of ["voxel.js","voxel-maps.js","scenery.js"])
+    vm.runInContext(fs.readFileSync(path.join(game,file),"utf8"),box);
+  const {maps,scenery,camera}=vm.runInContext("({maps:GuildVoxelMaps,scenery:GuildScenery,camera:GuildVoxel.townCamera(3)})",box);
+  const draw=(ctx,actors,highlight)=>{highlight(ctx);actors.forEach(a=>a.paint(ctx));};
+  draw.prepare=async()=>{};
+  maps.get=()=>draw;
+  const plot=Guild.plotForSite("westPass");
+  const stop=scenery.mount(canvas,{people:[],url:id=>id,camera,built:s.town.plots,activePlot:()=>plot,
+    ranges:()=>[{center:plot.center,range:Guild.defenseStats(s,plot.id).range}],
+    raidScene:()=>({raid,defenders:Guild.raidDefenders(s),fraction})});
+  await Promise.resolve();
+  frame(0);
+  const enemy=()=>stamps.findLast(a=>a.id==="boar");
+  const first=enemy(), [x,y]=camera.project(...road[step].slice(0,2));
+  assert.ok(Math.hypot(first.x-x,first.y-y)<.001);
+  fraction=.8; frame(1);
+  assert.deepEqual(enemy(),first);
+  assert.ok(rings.some(r=>r[0]===plot.center[0] && r[2]===Guild.defenseTypes.wall.range));
+  assert.ok(labels.includes("バリケード・足止め") && labels.includes("ミナ"));
   stop();
 });

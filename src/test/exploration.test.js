@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const Guild = require("../engine.js");
+const waitForGuest = require("./wait-for-guest");
 
 const app = ["icons.js", "voxel.js", "voxel-maps.js", "scenery.js", "app.js"].map(file => fs.readFileSync(path.join(__dirname, "..", file), "utf8")).join("\n");
 
@@ -22,7 +23,7 @@ function openGame(saved, world, media = {}) {
     showModal() { this.open = true; }, close() { this.open = false; }
   });
   element("#creator").fields = {job:"sword",trait:"bold",tone:"polite"};
-  vm.runInNewContext(app, {
+  const scenePeople = vm.runInNewContext(app + "\n;({townPeople, expeditionPeople, selected})", {
     Guild, URLSearchParams, performance:world || performance, cancelAnimationFrame() {}, window: { setInterval:world?.setInterval, location: { search: "" }, scrollTo() {} },
     FormData: class extends Map { constructor(form) { super(Object.entries(form.fields)); } },
     Image:media.Image, URL:media.URL,
@@ -48,14 +49,27 @@ function openGame(saved, world, media = {}) {
       }
     },
     element,
+    townSprite(id) { return scenePeople.townPeople().find(p => p.id === id)?.sprite; },
+    expeditionSprite(id) {
+      return scenePeople.expeditionPeople(scenePeople.selected().trip).find(p => p.id === id)?.sprite;
+    },
     select(id, value) {
       const el = element("#"+id);
       Object.assign(el,{id,value,dataset:{}});
       handlers.change({target:el});
     },
+    assign(id,value) { handlers.change({target:{dataset:{guard:id},value}}); },
+    equipDefense(id,option) { handlers.click({target:{closest:()=>({dataset:{action:"equip-defense",id,option}})}}); },
     changeRule(rule, field, value) { handlers.change({target:{dataset:{rule:String(rule),field},value}}); },
     changePick(id, checked) { handlers.change({ target:{dataset:{pick:id}, checked} }); },
     writeNote(note,value) { handlers.input({target:{dataset:{note},value}}); },
+    previewAppearance(fields) {
+      const form = element("#appearance-editor");
+      Object.assign(form,{id:"appearance-editor",fields});
+      handlers.change({target:{form}});
+      return element("#appearance-preview").innerHTML;
+    },
+    submitAppearance(fields) { handlers.submit({target:{id:"appearance-editor",fields},preventDefault() {}}); },
     submitCreator(fields) { handlers.submit({target:{id:"creator",fields},preventDefault() {}}); },
     submitNames(fields) { handlers.submit({target:{id:"character-names",fields},preventDefault() {}}); },
     fillProfile(fields) {
@@ -903,6 +917,102 @@ test("ギルド設定の階級が人物手帳に反映され、一般冒険者�
   assert.match(resumed.html("#screen"),/が仲間になった/);
 });
 
+test("リィナの来訪伝書から契約し、人物手帳・町・遠征で固有の姿が表示される", () => {
+  const s = Guild.initial();
+  Guild.depart(s);
+  for (let i=0; i<8 && s.phase==="explore"; i++) Guild.step(s);
+  s.metrics[0] = 16;
+  Guild.nextWeek(s);
+  waitForGuest(s,"riina");
+  const game = openGame(JSON.stringify(s));
+  assert.match(game.html("#screen"),/class="special-visits"[\s\S]*?特別な来訪[\s\S]*?退魔忍リィナ/);
+  game.click("nav","mail");
+  assert.match(game.html("#screen"),/退魔忍リィナがホールを訪れた/);
+  game.click("nav","roster");
+  game.click("guest","riina");
+  assert.match(game.html("#dialog-body"),/riina\.webp/);
+  game.select("guest-offer","premium");
+  game.click("scout");
+  game.click("character","riina");
+  assert.ok(game.html("#dialog-body").includes("破邪の印"));
+  assert.ok(game.html("#dialog-body").includes("riina.webp"));
+  assert.equal(game.townSprite("riina"),"riina");
+  const joined = game.state();
+  Guild.configure(joined,["riina"],"riina","safe",0);
+  const resumed = openGame(JSON.stringify(joined));
+  resumed.click("prepare");
+  resumed.click("depart");
+  assert.equal(resumed.expeditionSprite("riina"),"riina");
+});
+
+test("ユキナの来訪伝書から契約でき、名簿と人物手帳、町と遠征に専用の姿が出る", () => {
+  const s = Guild.initial();
+  s.metrics[0] = 18;
+  s.gold = 3000;
+  Guild.build(s,"west","shop","alchemy");
+  waitForGuest(s,"yukina");
+  const game = openGame(JSON.stringify(s));
+  game.click("nav","mail");
+  assert.match(game.html("#screen"),/巫女ユキナが薬草を携えて/);
+  game.click("nav","roster");
+  game.click("guest","yukina");
+  assert.match(game.html("#dialog-body"),/yukina\.webp/);
+  game.select("guest-offer","premium");
+  game.click("scout");
+  assert.match(game.html("#screen"),/data-person="yukina"/);
+  game.click("character","yukina");
+  assert.match(game.html("#dialog-body"),/鈴の祈り/);
+  assert.match(game.html("#dialog-body"),/yukina\.webp/);
+  assert.equal(game.townSprite("yukina"),"yukina");
+  const joined = game.state();
+  Guild.configure(joined,["yukina"],"yukina","safe",0);
+  const resumed = openGame(JSON.stringify(joined));
+  resumed.click("prepare");
+  resumed.click("depart");
+  assert.equal(resumed.expeditionSprite("yukina"),"yukina");
+});
+
+test("第2弾の4人は伝書から契約でき、名簿・人物手帳・町・遠征に専用の姿が出る", () => {
+  const s = Guild.initial();
+  s.gold = 3000;
+  Guild.build(s,"west","inn");
+  Guild.depart(s);
+  Guild.step(s);
+  Guild.returnHome(s);
+  s.raids.warning = {outer:true,routeVersion:2,road:"west",count:1,tier:0,due:1};
+  Guild.advanceTime(s,1);
+  const raid = s.raids.active;
+  const guard = Guild.raidDefenders(s)[0];
+  raid.enemies[0].step = Guild.guardPost(raid,guard,0).step;
+  raid.enemies[0].hp = 1;
+  Guild.advanceTime(s,Guild.raidBeat);
+  s.metrics[0] = 22;
+  s.metrics[3] = 70;
+  Guild.nextWeek(s);
+  for (const id of ["jobava","tanaka","shiina","goto"]) {
+    waitForGuest(s,id);
+    const game = openGame(JSON.stringify(s)), guest = Guild.uniqueGuests[id];
+    game.click("nav","mail");
+    assert.ok(game.html("#screen").includes(guest.letter));
+    game.click("nav","roster");
+    game.click("guest",id);
+    assert.ok(game.html("#dialog-body").includes(id+".webp"));
+    game.select("guest-offer","premium");
+    game.click("scout");
+    assert.ok(game.html("#screen").includes('data-person="'+id+'"'));
+    game.click("character",id);
+    assert.ok(game.html("#dialog-body").includes(id+".webp"));
+    assert.ok(game.html("#dialog-body").includes(guest.pledge));
+    assert.equal(game.townSprite(id),id);
+    const joined = game.state();
+    Guild.configure(joined,[id],id,"safe",0);
+    const resumed = openGame(JSON.stringify(joined));
+    resumed.click("prepare");
+    resumed.click("depart");
+    assert.equal(resumed.expeditionSprite(id),id);
+  }
+});
+
 test("町と伝書箱に斥候の到着予告が届き、留守番・修理・報告を画面から扱える", t => {
   t.mock.method(Math,"random",()=>.1);
   let now=0, tickWorld;
@@ -910,6 +1020,7 @@ test("町と伝書箱に斥候の到着予告が届き、留守番・修理・�
   const s=Guild.initial();
   Guild.build(s,"west","shop","alchemy");
   while (!s.raids.warning) Guild.nextWeek(s,true);
+  delete s.raids.warning.routeVersion; s.raids.warning.outer=false; // Pre-expansion save
   let game=openGame(JSON.stringify(s),world);
   game.click("nav","mail");
   assert.match(game.html("#screen"),/斥候からの伝書/);
@@ -1024,16 +1135,17 @@ test("町とホールの施設一覧に実効値と休止状態、人物手帳�
 });
 
 test("立体地形の橋詰から塔を建築し、再読込した区画と施設一覧に反映する", () => {
-  let game = openGame();
+  const s=Guild.initial(); s.gold+=Guild.buildings.bow.cost;
+  let game = openGame(JSON.stringify(s));
   assert.match(game.html("#screen"),/data-mode="stack"/);
   game.click("plot","upperBridge");
   assert.match(game.html("#dialog-body"),/上流の橋詰/);
   assert.match(game.html("#dialog-body"),/北の丘道沿い/);
   game.click("build","bow");
-  assert.equal(game.state().gold,160);
+  assert.equal(game.state().gold,s.gold-Guild.buildings.bow.cost);
   assert.equal(game.state().town.outerTerritory,true);
   game = game.reload();
-  assert.match(game.html("#screen"),/上流の橋詰の弓の塔/);
+  assert.match(game.html("#screen"),/上流の橋詰のバリスタ台/);
   game.click("plot","upperBridge");
   assert.match(game.html("#dialog-body"),/防衛値 ＋6/);
 });
@@ -1132,13 +1244,13 @@ test("人物手帳の贈り物・結婚から町の家系図、成長後の入�
 
 test("丘の建築・建て替え・治療を画面から操作し、再読込で結果を保持する", () => {
   const s=Guild.initial();
-  s.gold=1000; s.roster[0].debuffs={arm:0};
+  s.gold=10000; s.roster[0].debuffs={arm:0};
   let game=openGame(JSON.stringify(s));
   game.click("plot","hill");
   const catalog=game.html("#dialog-body");
   for (const b of Object.values(Guild.landmarks)) assert.ok(catalog.includes(b.name));
   game.click("build-landmark","cathedral");
-  assert.equal(game.state().gold,760);
+  assert.equal(game.state().gold,s.gold-Guild.landmarkPrice(s));
   game.click("plot","hill");
   assert.ok(game.html("#dialog-body").includes("ミナの治療手帳"));
   game.click("character","mina");
@@ -1151,7 +1263,7 @@ test("丘の建築・建て替え・治療を画面から操作し、再読込�
   game=game.reload();
   game.click("plot","hill");
   assert.ok(game.html("#dialog-body").includes("<h3>お城</h3>"));
-  assert.equal(game.state().gold,280);
+  assert.equal(game.state().gold,s.gold-Guild.landmarkPrice(s)-Guild.cureCost-Guild.landmarkPrice(game.state()));
 });
 
 test("捜索中のタイマーが同じ部屋で再始動し、再読込を越えて救助完了まで進む", () => {
@@ -1170,7 +1282,7 @@ test("捜索中のタイマーが同じ部屋で再始動し、再読込を越�
 
 test("捕縛の救助要請を画面で受け、途中セーブから派遣と治療を完了できる", t => {
   const s=Guild.initial();
-  s.gold=1500;
+  s.gold=6000;
   s.history.push({dungeon:"moss",cleared:true,path:["gate","home"],log:[]});
   Guild.depart(s,s,{party:["mina"],leader:"mina",dungeon:"canal",policy:"bold",meds:1},true);
   s.trip.unit[0].hp=1;
@@ -1193,4 +1305,114 @@ test("捕縛の救助要請を画面で受け、途中セーブから派遣と�
   const restored=game.reload();
   restored.click("character","mina");
   assert.match(restored.html("#dialog-body"),/大聖堂で治療中/);
+});
+
+test("旧セーブの店と修理を残して2軒目を選び、再開後も別店舗として開ける", () => {
+  const old = Guild.initial();
+  Guild.build(old,"brook","shop","armor");
+  old.town.workshops.brook.xp = 2;
+  old.town.repairs.brook = {remaining:1,chance:1};
+  old.gold = 300;
+  let game = openGame(JSON.stringify(old));
+  game.click("plot","brook");
+  assert.match(game.html("#dialog-body"),/容量 1\/2/);
+  const first = game.state().town.workshops.brook;
+  game.select("build-specialty","alchemy");
+  game.click("build-addition","shop");
+  const s = game.state(), second = Guild.plotForSite("brook").sites[1];
+  assert.equal(s.gold,225);
+  assert.deepEqual(s.town.workshops.brook,first);
+  assert.equal(s.town.workshops[second].type,"alchemy");
+  game = game.reload();
+  game.click("plot","brook");
+  const panel = game.html("#dialog-body");
+  assert.match(panel,/容量 2\/2/);
+  assert.match(panel,/1軒目[\s\S]*修理中[\s\S]*2軒目 ・ 錬金術師/);
+  assert.doesNotMatch(panel,/建築カタログ/);
+  game.click("open-shop",second);
+  assert.match(game.html("#screen"),/小川のほとり（2軒目） ・ 店 Lv.1/);
+  assert.equal(Guild.townTotals(game.state().town).income,8);
+});
+
+test("防衛専用地で射程を比較して塔を育て、守備配置と迎撃報告を画面から確認する", t=>{
+  t.mock.method(Math,"random",()=>.1);
+  const s=Guild.initial();
+  s.gold=15000;
+  while (!s.raids.warning) Guild.nextWeek(s,true);
+  let now=0,tick;
+  const world={now:()=>now,setInterval(fn){ tick=fn; }};
+  let game=openGame(JSON.stringify(s),world);
+  game.click("plot","westGate");
+  assert.match(game.html("#dialog-body"),/防衛専用地/);
+  assert.doesNotMatch(game.html("#dialog-body"),/data-id="farm"/);
+  game.select("preview-kind","magic");
+  assert.match(game.html("#defense-preview"),/射程 155.*範囲/s);
+  game.click("build","watch");
+  game.click("plot","westGate");
+  game.click("upgrade-defense","westGate");
+  game.equipDefense("westGate","fire");
+  assert.match(game.html("#dialog-body"),/火矢 ・ 装備中/);
+  assert.match(game.html("#dialog-body"),/Lv.2　耐久 22 \/ 22/);
+  game.click("close");
+  game.assign("mina","front");
+  game=game.reload();
+  assert.equal(game.state().raids.warning.assignments.mina,"front");
+  now=s.raids.warning.due; tick();
+  for (let i=0;i<14 && !game.state().raids.active?.contributions.westGate?.damage;i++) {
+    now+=Guild.raidBeat; tick();
+  }
+  assert.match(game.html("#screen"),/西の木戸/);
+  const raid=game.state().raids.active;
+  assert.ok(raid.contributions.westGate.damage>0);
+  now+=40*Guild.raidBeat; tick();
+  game.click("nav","history");
+  assert.match(game.html("#screen"),/見張り塔<\/b>（西の木戸）.*ダメージ/);
+});
+
+test("名簿で選んだ顔を人物手帳で編集し、再読込後は隊長の伝書にも表示する", () => {
+  const game = openGame();
+  game.click("nav","roster");
+  game.click("create");
+  for (const field of ["job","sex","hair"]) assert.ok(game.html("#dialog-body").includes('name="'+field+'"'));
+  const first = {job:"bard",sex:"male",hair:"gold"};
+  game.submitCreator({name:"ノア",trait:"kind",tone:"normal",...first});
+  assert.match(game.html("#screen"),/portrait_bard_male_gold\.webp/);
+  game.click("character","custom");
+  assert.match(game.html("#dialog-body"),/portrait_bard_male_gold\.webp/);
+  game.element("#appearance-editor").fields = first;
+  game.click("appearance");
+  const second = {job:"fighter",sex:"female",hair:"black"};
+  assert.match(game.previewAppearance(second),/portrait_fighter_female_black\.webp/);
+  game.submitAppearance(second);
+  assert.match(game.html("#dialog-body"),/portrait_fighter_female_black\.webp/);
+  assert.equal(game.townSprite("custom"),"fighter_female_black");
+  const s = game.state();
+  Guild.configure(s,["custom"],"custom","safe",0);
+  const resumed = openGame(JSON.stringify(s));
+  resumed.click("nav","mail");
+  assert.match(resumed.html("#screen"),/portrait_fighter_female_black\.webp/);
+  resumed.click("prepare");
+  resumed.click("depart");
+  assert.equal(resumed.expeditionSprite("custom"),"fighter_female_black");
+});
+
+test("外周の新築は一軒までで、以前の二軒目は店の成長と修理を保って開ける", () => {
+  const saved = Guild.initial();
+  Guild.build(saved,"westBend","farm");
+  let game = openGame(JSON.stringify(saved));
+  game.click("plot","westBend");
+  assert.match(game.html("#dialog-body"),/容量 1\/1/);
+  assert.doesNotMatch(game.html("#dialog-body"),/建築カタログ/);
+
+  const second = "westBend-2";
+  saved.town.plots[second] = "forge";
+  saved.town.workshops[second] = {...saved.town.workshops.hall,xp:2};
+  saved.town.repairs[second] = {remaining:1,chance:1};
+  game = openGame(JSON.stringify(saved));
+  game.click("plot","westBend");
+  assert.match(game.html("#dialog-body"),/容量 2\/2[\s\S]*2軒目 ・ 鍛冶屋[\s\S]*修理中/);
+  assert.doesNotMatch(game.html("#dialog-body"),/建築カタログ/);
+  game.click("open-shop",second);
+  assert.match(game.html("#screen"),/榛の曲がり角（2軒目）/);
+  assert.deepEqual(game.state().town.workshops[second],saved.town.workshops[second]);
 });

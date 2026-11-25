@@ -45,6 +45,8 @@ test("留守の施設では道沿いだけが損傷し、広場の被害・略�
   let s = G.initial();
   G.build(s,"west","farm"); G.build(s,"east","shop");
   scout(s);
+  // This saved warning predates the outer routes and final-line battle.
+  delete s.raids.warning.routeVersion; s.raids.warning.outer = false;
   G.depart(s);
   s.visitors = [];
   const gold = s.gold, food = s.town.food, satisfaction = s.metrics[3];
@@ -91,7 +93,7 @@ test("遠征中の全隊を除外し、緊急帰還した隊だけが守りに�
 test("施設が自動でヌシを迎撃し、倉庫の素材を加工できて討伐の偉業も残る", t => {
   t.mock.method(Math,"random",()=>.1);
   const s = G.initial();
-  s.gold = 1000;
+  s.gold = 10000;
   G.build(s,"west","magic");
   G.build(s,"clover","bow");
   G.build(s,"linden","wall");
