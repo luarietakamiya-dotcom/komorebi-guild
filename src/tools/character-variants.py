@@ -88,6 +88,11 @@ def make_sheet(job, sex, hair):
     v = stack.Volume(32, breadth=1.14 if sex == "male" else 1.04)
     stack.body(v, *COSTUMES[job])
     equipment(v, job)
+    hairstyle(v, sex, hair)
+    return v.sheet()
+
+
+def hairstyle(v, sex, hair):
     stack.face(v, hair, hair)
     if sex == "female":
         for s in (-1,1):
@@ -100,7 +105,6 @@ def make_sheet(job, sex, hair):
         v.twig((.5,-1,29), (3,-1.8,31.2), 2.05, .85, hair)
         for s in (-1,1):
             v.twig((s*1.7,5.6,23.8),(s*4.2,4.8,24.7),.77,.75,hair)
-    return v.sheet()
 
 
 def portrait_variants(cell, job, sex):

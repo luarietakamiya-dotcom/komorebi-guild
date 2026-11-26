@@ -96,7 +96,7 @@ function partyRow(id, u) {
   const p = who(id), max = g.outfittedStat(state,p, "hp"), leader = (selected().trip?.leader || selected().leader) === id;
   const hp = u?.hp ?? g.currentHP(state,p);
   return `<div class="party-row">${portrait(p, "face-"+p.job)}<div class="member"><div class="name-line"><b>${esc(p.name)}</b>${leader?tag(icon("crown",11)+"リーダー","gold"):""}<small>Lv.${p.level}</small></div>
-    <p>${g.jobs[p.job].name}<i>・</i>${g.traits[p.trait]}${u && u.state!=="ok"?" ・"+names[u.state]:""}${selected().trip?.fight?.shaken[id] ? " ・動揺" : ""}</p>
+    <p>${g.jobName(p.job,p.sex)}<i>・</i>${g.traits[p.trait]}${u && u.state!=="ok"?" ・"+names[u.state]:""}${selected().trip?.fight?.shaken[id] ? " ・動揺" : ""}</p>
     <div class="hp"><i><em style="width:${100*hp/max}%"></em></i><small>HP ${hp}/${max}</small></div><small>MP ${u?.mp ?? g.currentMP(p)}/${g.maxMP(p)} ・ ${lifeStatus(p)}<br>${moraleText(p)}</small>${action("gambits","戦術オーダー","text-btn",`data-id="${id}" aria-label="${esc(p.name)}の戦術オーダーを編集"`)}</div></div>`;
 }
 function partyPanel() {
@@ -236,7 +236,7 @@ function ageDetails(p) {
   return `<section><h3>${ageLabel(p)}</h3><p>${r.description} ${decline}</p>
     <p>経験値倍率 ${Math.round(100*g.growthRate(p))}％ ・ 加齢による低下 ${p.frailty}％ ・ 寿命 ${r.lifespan}歳</p>
     <p>魔力 ${g.stat(p,"magic")} ・ 精神 ${g.stat(p,"spirit")} ・ 器用 ${g.stat(p,"dex")} ・ 対魔術防御 ＋${g.spellDefense(p)}</p>
-    <small>${r.favored.length ? "得意職："+r.favored.map(id=>g.jobs[id].name).join("・")+"。 " : ""}魔力は魔術と回復、精神は最大MPと対魔術防御、器用は弓技に影響します。</small></section>`;
+    <small>${r.favored.length ? "得意職："+r.favored.map(id=>g.jobName(id,p.sex)).join("・")+"。 " : ""}魔力は魔術と回復、精神は最大MPと対魔術防御、器用は弓技に影響します。</small></section>`;
 }
 function yearLengthControl() {
   return `<label>1年の長さ <select id="year-length">${g.yearLengths.map(n =>
@@ -244,7 +244,7 @@ function yearLengthControl() {
 }
 const axes = {...g.effectNames,dex:"器用",magic:"魔力",spirit:"精神"};
 function inheritanceText(p) {
-  return [p.jobAffinity ? g.jobs[p.jobAffinity].name+"系の経験値＋5％" : g.jobs[p.job].name+"向き", g.traits[p.trait], p.aptitude && axes[p.aptitude]+"に素質",
+  return [p.jobAffinity ? g.jobName(p.jobAffinity,p.sex)+"系の経験値＋5％" : g.jobName(p.job,p.sex)+"向き", g.traits[p.trait], p.aptitude && axes[p.aptitude]+"に素質",
     p.skillTalent && "家伝の技「"+g.abilities[p.skillTalent].name+"」"].filter(Boolean).join(" ・ ");
 }
 function relationshipPanel(p) {
@@ -301,7 +301,7 @@ function roster() {
     const unit = owner?.trip?.unit.find(u=>u.id===p.id);
     const status = visitor?"雇用候補":p.leaveWeek === state.week?"休暇中":unit && owner.phase==="report" ? (unit.injury || unit.state==="severe"?"療養予定":"帰還") :unit && unit.state!=="ok" ? names[unit.state] :resting?"療養中":owner?teamName(owner)+(owner.phase==="explore"?"・遠征中":"・編成中"):"控え";
     return `<article class="panel roster-card" data-person="${esc(p.id)}">${tag(status,visitor?"gold":resting?"rose":"mint")}${portrait(p)}
-      <h2>${esc(g.formalName(p))}</h2><p>${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p><p>${ageLabel(p)}</p><p>階級　${esc(g.rankName(state,p))}</p>
+      <h2>${esc(g.formalName(p))}</h2><p>${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p><p>${ageLabel(p)}</p><p>階級　${esc(g.rankName(state,p))}</p>
       <div class="character-stats"><span>HP <b>${g.outfittedStat(state,p,"hp")}</b></span><span>攻 <b>${g.outfittedStat(state,p,"atk")}</b></span><span>防 <b>${g.outfittedStat(state,p,"def")}</b></span><span>速 <b>${g.outfittedStat(state,p,"spd")}</b></span></div>
       <p class="fine">${visitor?"採集時に薬草＋1個。雇用費＝Lv × 50G":resting && g.fitWeek(p)>state.week+(selected().phase==="report"?1:0)?"復帰予定：第"+g.fitWeek(p)+"週の始め":"経験値 "+p.xp+" / "+(20*p.level**2)+"　週給 "+(10+2*p.level)+"G"}</p>
       ${visitor ? "" : `<p class="fine">現在HP ${owner?.phase === "explore" ? unit.hp : g.currentHP(state,p)}/${g.outfittedStat(state,p,"hp")} ・ MP ${unit?.mp ?? g.currentMP(p)}/${g.maxMP(p)}<br>${moraleText(p)} ・ ${lifeStatus(p)}</p>`}
@@ -329,9 +329,9 @@ function visitorBoard() {
   const ordered = visitors.filter(p => g.uniqueGuests[p.id]).concat(visitors.filter(p => !g.uniqueGuests[p.id]));
   return `<section class="panel padded guest-board">${title("team","今週の来訪者",cap("名声 "+g.fame(state)))}
     <p class="fine">複数のギルドで仕事をする冒険者です。週の前半はホールで会えます。専属契約を結ぶと所属冒険者として編成できます。週後半は一般冒険者向けの継続依頼に出発します。</p>
-    <div class="guest-list">${ordered.map(p=>action("guest",portrait(p)+`<span><b>${g.uniqueGuests[p.id] ? "特別な来訪 ・ " : ""}${esc(p.name)}</b><small>${g.jobs[p.job].name} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
+    <div class="guest-list">${ordered.map(p=>action("guest",portrait(p)+`<span><b>${g.uniqueGuests[p.id] ? "特別な来訪 ・ " : ""}${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
       <small>${p.mission ? g.dungeons[p.mission.dungeon].name+"で「"+g.quests[p.mission.quest].name+"」を受注中" : "ホールに滞在中"}</small></span>`,"btn",`data-id="${p.id}"`)).join("") || "今週の来訪者はいません。"}</div>
-    <details><summary>訪問のうわさ</summary>${state.registry.filter(p=>g.uniqueGuests[p.id]).map(p=>`<p>${g.jobs[p.job].name}${esc(p.name)}（${ageLabel(p)}）　${g.uniqueGuests[p.id].invitation}</p>`).join("")}</details>
+    <details><summary>訪問のうわさ</summary>${state.registry.filter(p=>g.uniqueGuests[p.id]).map(p=>`<p>${g.jobName(p.job,p.sex)}${esc(p.name)}（${ageLabel(p)}）　${g.uniqueGuests[p.id].invitation}</p>`).join("")}</details>
     ${market.returns.length || market.gold ? `<details><summary>町に届いた分け前</summary>
       ${market.returns.map(r=>`<p>${esc(r.name)}が「${g.quests[r.quest].name}」から帰還。町に${g.items[g.quests[r.quest].item].name}1個と${r.gold}Gを納めました。</p>`).join("")}
       ${action("market",`金庫と倉庫へ（${market.gold}G・薬草${market.herb}・鉱石${market.ore}）`,"btn",market.gold?"":"disabled")}</details>` : ""}</section>`;
@@ -342,7 +342,7 @@ function guestDetail() {
   const status = g.scoutStatus(state,p,guestOffer);
   const unique = g.uniqueGuests[p.id];
   return modalHead("team",esc(p.name)+"の登録票")+`<div class="character-detail"><section>
-    ${portrait(p)}<p>${unique ? "特別な来訪者" : "一般冒険者"} ・ ${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p>
+    ${portrait(p)}<p>${unique ? "特別な来訪者" : "一般冒険者"} ・ ${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ Lv.${p.level}</p>
     <p>${esc(p.backstory || "他のギルドの仕事も引き受け、町を行き来している。")}</p>
     <p>得意技　${p.skills.map(id=>g.abilities[id].name).join("・")}</p></section>
     <section><h3>専属契約の交渉</h3><p>この町で終えた依頼 ${p.contacts || 0}件 ・ ギルドの信用 ${state.metrics[1]}</p>
@@ -382,8 +382,34 @@ function debuffCare(p) {
     return `<div><b>${symptom.name}</b> ・ ${effect}${recovery}<div class="actions">${limb}${cure}</div></div>`;
   }).join("");
 }
+function nextJobs(job) {
+  return g.treeJobs.filter(id => g.jobs[id].from?.includes(job));
+}
+function jobPanel(p,away) {
+  const current = g.jobs[p.job], name = id => g.jobName(id,p.sex);
+  if (current.tier == null) return `<section><h3>職業</h3><p>${name(p.job)}（固有職）</p></section>`;
+  const row = id => {
+    const job = g.jobs[id], {missing} = g.promotionStatus(p,id);
+    const known = p.jobHistory.includes(id), skills = job.skills.map(key => g.abilities[key].name).join("・");
+    const route = job.from ? `Lv.${g.tierLevels[job.tier]} ・ ${job.from.map(name).join("／")}から` : "レベル条件なし";
+    const status = missing.length ? "あと必要な条件：" + missing.join(" ／ ") : away ? "帰還後に転職できます" : "転職できます";
+    return `<div><span><b>${name(id)}</b> ・ ${job.specialty}<small>${known ? "経験済み" : route} ｜ 技：${skills}</small>
+      <small>${status}</small></span>${action("promote",known ? "復職" : "転職","btn",
+        `data-id="${id}" aria-label="${name(id)}に転職" ${away || missing.length ? "disabled" : ""}`)}</div>`;
+  };
+  const next = nextJobs(p.job);
+  const others = g.tierNames.map((tier,i) => {
+    const ids = [...g.treeJobs,...p.jobHistory.filter(id => g.jobs[id].tier === 0)].filter(id =>
+      id !== p.job && !next.includes(id) && g.jobs[id].tier === i);
+    return ids.length ? `<details class="rules" id="job-tier-${i}"><summary>${tier}（${ids.length}職）</summary><div class="training-rows">${ids.map(row).join("")}</div></details>` : "";
+  }).join("");
+  return `<section><h3>職業と転職</h3><p><b>${name(p.job)}</b>（${g.tierNames[current.tier]}） ・ ${current.specialty}</p>
+    <p class="fine">経験した職：${p.jobHistory.map(name).join("・")}。町では別の下位職に就いたり、経験した職に戻ったりできます。</p>
+    ${next.length ? `<h4>${name(p.job)}から進める職</h4><div class="training-rows">${next.map(row).join("")}</div>` : ""}
+    <h4>ほかの転職先と条件</h4>${others}</section>`;
+}
 function characterProgress(p) {
-  const job = g.jobs[p.job], away = g.awayMember(state,p.id), points = g.freePoints(p);
+  const away = g.awayMember(state,p.id), points = g.freePoints(p);
   const rows = Object.entries(g.statGains).map(([key,gain]) =>
     `<div><span>${g.effectNames[key]} <b>${g.outfittedStat(state,p,key)}</b><small>配分 ${p.allocation[key]} pt</small></span>
       ${action("allocate",`＋${gain}`,"btn",`data-id="${key}" aria-label="${g.effectNames[key]}に1ポイント配分" ${away || !points ? "disabled" : ""}`)}</div>`).join("");
@@ -394,18 +420,16 @@ function characterProgress(p) {
   const counts = new Map();
   for (const e of p.career) if (e.quest) counts.set(e.quest,(counts.get(e.quest) || 0) + 1);
   return ageDetails(p) + relationshipPanel(p) + examPanel(p) + `<section><h3>能力配分 <small>残り ${points} pt</small></h3>
-    <p>${job.name} ・ Lv.${p.level} ・ 経験値 ${p.xp} / ${20*p.level**2}</p>
+    <p>${g.jobName(p.job,p.sex)} ・ Lv.${p.level} ・ 経験値 ${p.xp} / ${20*p.level**2}</p>
     <p class="fine">${away ? "遠征中です。育成は帰還後にできます。" : "1レベルにつき2ポイント。表示値には装備と士気の効果も含みます。"}</p>
     <p>${moraleText(p)}。士気70以上で能力1.1倍、30以下で0.9倍。依頼達成で＋6、未達で−4、負傷して帰るとさらに−4。週末に町にいる仲間は、士気の高い人が低い人より多いと満足度＋1、少ないと−1。</p>
     <div class="training-rows">${rows}</div>
     ${action("reset-allocation",`配分を戻す（${g.resetCost} G）`,"btn",away || !state.allowStatReset || !g.spentPoints(p) || g.guildGold(state) < g.resetCost ? "disabled" : "")}
     ${state.allowStatReset ? "" : '<small>ギルド設定で振り直しが無効です。</small>'}</section>
     <section><h3>スキル <small>習得 ${p.skills.length} / ${g.skillLimit} 枠</small></h3><ul>${learned}</ul>
-    <p class="fine">習得枠は全職共通です。一度覚えたスキルは転職後も自動戦闘で使います。家伝の技の素質があれば、その1技だけは職業や転職時期を問わず通常の空き枠で習得できます。</p>
+    <p class="fine">技は現在の職で習得し、転職後も使えます。習得枠は全職共通です。家伝の技は職を問わず、通常の空き枠で習得できます。学院があると、対象の職では上位技も先修できます。</p>
     ${choices ? `<h4>現在習得できる技</h4><div class="training-rows">${choices}</div>` : "<p>この職業の技はすべて習得済みです。</p>"}
-    ${job.next ? `<details class="rules"><summary>${g.jobs[job.next].name}への転職（Lv.${g.promotionLevel}から）</summary>
-      <p>転職すると${job.name}には戻れません。家伝の技を除き、今の職の技は転職前に選んでください。転職先の技は「${g.jobs[job.next].skills.map(id=>g.abilities[id].name).join("」「")}」です。</p>
-      ${action("promote",g.jobs[job.next].name+"に転職する","btn",away || p.level < g.promotionLevel ? "disabled" : "")}</details>` : ""}</section>
+    </section>${jobPanel(p,away)}
     <section><h3>健康と引退</h3><p>${lifeStatus(p)}。死亡${g.deathThreshold(state)}回で永久消失します。</p>
     ${debuffCare(p)}
     ${action("retirement","引退について相談する","btn",away ? "disabled" : "")}</section>
@@ -474,11 +498,14 @@ ${esc(p.memo)}</textarea></label>
 function refreshCharacter() {
   if (modal !== "character") return;
   if (!g.person(state,characterId)) { closeModal(); return; }
-  const panel = $("#character-progress"), promotionOpen = panel.querySelector("details")?.open;
+  const panel = $("#character-progress");
+  const openTiers = Array.from(panel.querySelectorAll?.("details[id][open]") || [], el => el.id);
   const focused = document.activeElement?.dataset;
   panel.innerHTML = characterProgress(who(characterId));
-  const details = panel.querySelector("details");
-  if (details && promotionOpen) details.open = true;
+  for (const id of openTiers) {
+    const tier = panel.querySelector("#"+id);
+    if (tier) tier.open = true;
+  }
   if (focused?.action) panel.querySelector(`[data-action="${focused.action}"]${focused.id ? '[data-id="'+focused.id+'"]' : ""}`)?.focus({preventScroll:true});
 }
 const stars = quality => "⭐".repeat(quality);
@@ -650,7 +677,7 @@ function journalPage() {
 function townPeople() {
   const villagers = [...state.roster.filter(p => !g.awayMember(state, p.id)), ...state.alumni.filter(p => p.departure.kind === "retired")];
   if (!who("shion")) villagers.push(g.recruit(state));
-  return [...villagers.map(p => ({ id: p.id, voice:p, sprite: g.characterArt(p).stack, name: g.familiarName(p), role: p.departure ? "引退した"+g.jobs[p.job].name : g.jobs[p.job].name })),
+  return [...villagers.map(p => ({ id: p.id, voice:p, sprite: g.characterArt(p).stack, name: g.familiarName(p), role: p.departure ? "引退した"+g.jobName(p.job,p.sex) : g.jobName(p.job,p.sex) })),
     ...state.children.map(p => ({id:p.id,voice:p,growing:true,name:g.familiarName(p),sprite:g.characterArt(p).stack,
       role:g.childStage(p)+" ・ "+p.age+"歳",scale:.5+.5*Math.min(1,p.age/g.species[p.species].adult)})),
     { id: "toto", voice:{trait:"kind",pronoun:"おいら",tone:"casual"}, sprite: "toto", name: g.artisanName(state.town.workshops.hall), role: "鍛冶屋 ・ "+g.shopRanks[state.town.workshops.hall.level-1] }];
@@ -1370,7 +1397,7 @@ function prepForm() {
   }).join("");
   return modalHead("pack",teamName(selected())+"の出発準備")+`<div class="prep-order">${asset(q.item)}<div><small>受注する依頼 ・ 受注した週限り</small><h3>${q.name}</h3><span>${g.items[q.item].name} ×${q.count} ／ 報酬 ${q.reward}G ／ 危険度 ${q.risk}</span></div></div>
     <div class="form-title"><b>遠征メンバー</b><small>${draft.party.length} / 3 人</small></div>
-    <div class="pick-list">${state.roster.map(p=>`<label class="pick ${draft.party.includes(p.id)?"picked":""}"><input type="checkbox" data-pick="${p.id}" ${draft.party.includes(p.id)?"checked":""} ${g.available(state,p)&&!g.awayMember(state,p.id)?"":"disabled"}>${portrait(p)}<span><b>${esc(p.name)}</b><small>${g.jobs[p.job].name} ・ ${g.traits[p.trait]} ・ ${esc(g.rankName(state,p))}${assignmentHint(p)}</small></span></label>`).join("")}</div>
+    <div class="pick-list">${state.roster.map(p=>`<label class="pick ${draft.party.includes(p.id)?"picked":""}"><input type="checkbox" data-pick="${p.id}" ${draft.party.includes(p.id)?"checked":""} ${g.available(state,p)&&!g.awayMember(state,p.id)?"":"disabled"}>${portrait(p)}<span><b>${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ ${esc(g.rankName(state,p))}${assignmentHint(p)}</small></span></label>`).join("")}</div>
     <label>行き先<select id="dungeon">${destinations}</select></label><small>依頼の必要階級：${esc(g.rankLabel(state,q.rank))}以上。隊員全員が条件を満たすと出発できます。</small>
     ${state.town.landmark === "academy" ? `<p><b>学院の古地図</b>　最初の分岐の先は${g.surveyDungeon(state,draft.dungeon).join(" ／ ")}。</p>` : ""}
     <div class="form-pair"><label>リーダー<select id="leader">${draft.party.map(id=>`<option value="${id}" ${draft.leader===id?"selected":""}>${esc(who(id).name)}</option>`).join("")}</select></label><label>探索方針<select id="policy">${Object.entries(g.policies).map(([id,name])=>`<option value="${id}" ${draft.policy===id?"selected":""}>${name}</option>`).join("")}</select></label></div>
@@ -1393,7 +1420,7 @@ function creationAgeHint(id) {
 }
 function jobField(p, id) {
   const choices = g.startingJobs.includes(p.job) ? g.startingJobs : [p.job];
-  const labels = Object.fromEntries(choices.map(job => [job,g.jobs[job].name]));
+  const labels = Object.fromEntries(choices.map(job => [job,g.jobName(job,p.sex)]));
   return `<label>職業<select name="job" id="${id}">${options(labels,p.job)}</select></label>`;
 }
 function appearanceFields(p, allowClassic = false) {
@@ -1417,6 +1444,8 @@ function updateEditPreview() {
   const form = $("#appearance-editor");
   const p = {...who("custom"),...readAppearanceForm(form)};
   p.useJobPortrait = !!form.elements?.useJobPortrait?.checked;
+  if (g.jobs[p.job].names && form.elements?.job)
+    form.elements.job.selectedOptions[0].textContent = g.jobName(p.job,p.sex);
   drawAppearancePreview(p,$("#appearance-preview"));
 }
 function drawAppearancePreview(p,host,caption = "") {
@@ -1449,7 +1478,8 @@ function updatePreview() {
   const training = g.entryTraining(p.job,race,age,p.initialSkill);
   const summary = Number.isInteger(age) && age >= r.adult && age < r.lifespan ?
     `<p>入団時　Lv.${training.level} ・ 経験値 ${training.xp} ・ ${training.skills.map(id=>g.abilities[id].name).join("、")}</p>` : "";
-  $("#voice-preview").innerHTML=summary;
+  const next = nextJobs(p.job).map(id => g.jobName(id,p.sex)+"（Lv."+g.tierLevels[g.jobs[id].tier]+"）");
+  $("#voice-preview").innerHTML=summary+`<p>${g.jobName(p.job,p.sex)}の得意分野：${g.jobs[p.job].specialty}</p><p>転職先：${next.join("・")}</p>`;
   drawAppearancePreview(p,$("#creator-appearance"),`<div><b>通信のプレビュー</b><p>「${esc(g.speak(p,"crisis",friend))}」</p></div>`);
 }
 async function squareImage(file, size) {
@@ -1566,7 +1596,10 @@ document.addEventListener("click",event=>{
       case "allocate": g.allocate(state,characterId,id); break;
       case "reset-allocation": g.resetAllocation(state,characterId); break;
       case "learn-ability": g.learnAbility(state,characterId,id); break;
-      case "promote": g.promote(state,characterId); break;
+      case "promote":
+        g.promote(state,characterId,id);
+        drawModal();
+        toast(g.jobName(who(characterId).job,who(characterId).sex)+"に転職しました。"); break;
       case "open-shop": openShop(id); return;
       case "shop-view":
         shopView = id;

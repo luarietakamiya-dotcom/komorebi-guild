@@ -1416,3 +1416,48 @@ test("外周の新築は一軒までで、以前の二軒目は店の成長と�
   assert.match(game.html("#screen"),/榛の曲がり角（2軒目）/);
   assert.deepEqual(game.state().town.workshops[second],saved.town.workshops[second]);
 });
+
+test("登録票で進路を確認し、人物手帳で分岐を選び、未達条件と復職先を読み直せる", () => {
+  const s = Guild.initial();
+  Guild.person(s,"mina").level = 2;
+  const game = openGame(JSON.stringify(s));
+  game.click("nav","roster");
+  game.click("create");
+  assert.match(game.html("#voice-preview"),/フェンサー（Lv.2）.*ナイト（Lv.2）/);
+  game.click("close");
+  game.click("character","mina");
+  const html = game.html("#dialog-body");
+  assert.match(html,/data-action="promote" data-id="knight"/);
+  assert.match(html,/聖騎士以外の上級職を1職経験する/);
+  game.click("promote","knight");
+  assert.equal(game.state().roster[0].job,"knight");
+  const reopened = game.reload();
+  reopened.click("character","mina");
+  assert.match(reopened.html("#dialog-body"),/ナイトから進める職[\s\S]*聖騎士[\s\S]*Lv.5まであと3/);
+  reopened.click("promote","sword");
+  assert.equal(reopened.state().roster[0].job,"sword");
+});
+
+test("聖女から聖人へ外見を編集し、人物手帳・町・遠征で同じ姿を使う", () => {
+  const s = Guild.initial();
+  Guild.register(s,{name:"ソラ",trait:"kind",tone:"normal",job:"healer",sex:"female",hair:"silver"});
+  Guild.person(s,"custom").level = 5;
+  Guild.configure(s,["custom"],"custom","safe",0);
+  const game = openGame(JSON.stringify(s));
+  game.click("character","custom");
+  game.click("promote","cleric");
+  game.click("promote","saint");
+  assert.match(game.html("#dialog-body"),/portrait_saint_female_silver\.webp/);
+  assert.equal(game.townSprite("custom"),"saint_female_silver");
+  game.element("#appearance-editor").fields = {job:"saint",sex:"female",hair:"silver"};
+  game.click("appearance");
+  const edited = {job:"saint",sex:"male",hair:"brown"};
+  assert.match(game.previewAppearance(edited),/portrait_saint_male_brown\.webp/);
+  game.submitAppearance(edited);
+  assert.match(game.html("#dialog-body"),/聖人/);
+  const resumed = game.reload();
+  assert.equal(resumed.townSprite("custom"),"saint_male_brown");
+  resumed.click("prepare");
+  resumed.click("depart");
+  assert.equal(resumed.expeditionSprite("custom"),"saint_male_brown");
+});

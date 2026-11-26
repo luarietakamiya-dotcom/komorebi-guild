@@ -54,12 +54,12 @@ test("旧セーブの顔・歩行とアップロード画像を保持し、編�
   assert.deepEqual(p,before);
   p.level = G.promotionLevel;
   G.promote(s,"custom");
-  assert.equal(G.characterArt(p).stack,"sword_female_silver");
+  assert.equal(G.characterArt(p).stack,"fencer_female_silver");
   assert.throws(() => G.editCustomAppearance(s,{job:"mage",sex:"male",hair:"brown"}));
   G.editCustomAppearance(s,{job:"fencer",sex:"male",hair:"brown"});
   assert.equal(p.useJobPortrait,false);
   assert.equal(p.portrait,uploaded);
-  assert.equal(G.characterArt(G.person(reload(s),"custom")).stack,"sword_male_brown");
+  assert.equal(G.characterArt(G.person(reload(s),"custom")).stack,"fencer_male_brown");
 });
 
 test("外見プレビューと歩行描画が同じ断面を足元から32枚積み、髪色を切り替えられる", async () => {
@@ -81,4 +81,37 @@ test("外見プレビューと歩行描画が同じ断面を足元から32枚積
     stacks.draw(ctx,stack,id=>id,80,54,1,Math.PI,{bob:2,tilt:.04});
     assert.deepEqual(painted.splice(0),expected);
   }
+});
+
+test("転職と復元を通じて44職×男女×4色の顔絵・32層モデルを切り替える", () => {
+  const faces = new Set(), stacks = new Set();
+  for (const sex of ["female","male"]) for (const hair of Object.keys(G.hairColors)) {
+    const s = G.initial();
+    G.register(s,{...profile,job:"sword",sex,hair});
+    const p = G.person(s,"custom");
+    p.level = 10;
+    for (const tier of [1,2,3,4]) for (const id of G.treeJobs.filter(id => G.jobs[id].tier === tier)) {
+      const from = G.jobs[id].from?.find(parent => p.jobHistory.includes(parent));
+      if (from && from !== p.job) G.promote(s,p.id,from);
+      if (p.job !== id) G.promote(s,p.id,id);
+      const key = [id,sex,hair].join("_"), face = "portrait_"+key;
+      for (const member of [p,G.person(reload(s),p.id)])
+        assert.deepEqual(G.characterArt(member),{stack:key,portrait:face});
+      const image = fs.readFileSync(path.join(assets,face+".webp"));
+      assert.equal(image.toString("ascii",8,12),"WEBP");
+      faces.add(createHash("sha256").update(image).digest("hex"));
+      const dir = path.join(assets,"stack_"+key);
+      const files = Array.from({length:32},(_,z) => String(z).padStart(2,"0")+".webp");
+      assert.deepEqual(fs.readdirSync(dir).sort(),files);
+      const hash = createHash("sha256");
+      for (const name of files) {
+        const bytes = fs.readFileSync(path.join(dir,name));
+        assert.equal(bytes.toString("ascii",8,12),"WEBP");
+        hash.update(bytes);
+      }
+      stacks.add(hash.digest("hex"));
+    }
+  }
+  assert.equal(faces.size,352);
+  assert.equal(stacks.size,352);
 });

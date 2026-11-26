@@ -2,19 +2,19 @@
 const Guild = (() => {
   "use strict";
   const jobs = {
-    sword: { name: "剣士", hp: 40, atk: 12, def: 8, spd: 9, face: "mina", next:"fencer", skills:["rally","slash","parry"] },
-    guard: { name: "盾役", hp: 55, atk: 7, def: 14, spd: 5, face: "gald", next:"knight", skills:["brace","shield","counter"] },
-    healer: { name: "治癒術師", hp: 28, atk: 5, def: 6, spd: 8, face: "popo", next:"cleric", skills:["renew","aid","focus"] },
-    hunter: { name: "狩人", hp: 32, atk: 10, def: 6, spd: 12, face: "shion", next:"ranger", skills:["scout","aim","hide"], forage:true },
-    mage: { name:"魔術師", hp:26, atk:8, def:4, spd:8, face:"popo", next:"sage", skills:["ember","ward","focus"] },
-    warrior: {name:"戦士", hp:48, atk:14, def:9, spd:6, face:"gald", skills:["cleave","brace","counter"]},
-    fighter: {name:"格闘家", hp:40, atk:11, def:7, spd:12, face:"mina", skills:["strike","footwork","focus"]},
-    bard: {name:"楽士", hp:32, atk:7, def:6, spd:11, face:"shion", skills:["song","aid","focus"]},
-    apothecary: {name:"薬師", hp:34, atk:6, def:7, spd:9, face:"popo", skills:["salve","aid","scout"]},
-    sage: { name:"賢者", hp:30, atk:11, def:6, spd:9, face:"popo", skills:["flare","prayer"] },
-    fencer: { name:"フェンサー", hp:42, atk:14, def:8, spd:12, face:"mina", skills:["lunge","footwork"] },
-    knight: { name:"ナイト", hp:60, atk:9, def:16, spd:5, face:"gald", skills:["bastion","bash"] },
-    cleric: { name:"回復術師", hp:32, atk:6, def:7, spd:9, face:"popo", skills:["prayer","ward"] },
+    sword: { name: "剣士", hp: 40, atk: 12, def: 8, spd: 9, face: "mina", next:"fencer", skills:["rally","slash","parry"], tier:1, specialty:"片手剣での攻防" },
+    guard: { name: "盾役", hp: 55, atk: 7, def: 14, spd: 5, face: "gald", next:"knight", skills:["brace","shield","counter"], tier:0, specialty:"盾による防御" },
+    healer: { name: "治癒術師", hp: 28, atk: 5, def: 6, spd: 8, face: "popo", next:"cleric", skills:["renew","aid","focus"], tier:1, specialty:"仲間の回復" },
+    hunter: { name: "狩人", hp: 32, atk: 10, def: 6, spd: 12, face: "shion", next:"ranger", skills:["scout","aim","hide"], forage:true, tier:1, specialty:"弓と素材採集" },
+    mage: { name:"魔術師", hp:26, atk:8, def:4, spd:8, face:"popo", next:"wizard", skills:["ember","ward","focus"], tier:1, specialty:"攻撃魔術" },
+    warrior: {name:"戦士", hp:48, atk:14, def:9, spd:6, face:"gald", skills:["cleave","brace","counter"], tier:1, specialty:"戦斧での重打" },
+    fighter: {name:"格闘家", hp:40, atk:11, def:7, spd:12, face:"mina", skills:["strike","footwork","focus"], tier:1, specialty:"連撃と身のこなし" },
+    bard: {name:"楽士", hp:32, atk:7, def:6, spd:11, face:"shion", skills:["song","aid","focus"], tier:1, specialty:"演奏による行動支援" },
+    apothecary: {name:"薬師", hp:34, atk:6, def:7, spd:9, face:"popo", skills:["salve","aid","scout"], tier:1, specialty:"薬による手当て" },
+    sage: { name:"賢者", hp:30, atk:11, def:6, spd:9, face:"popo", skills:["flare","prayer"], tier:3, specialty:"攻撃魔術と回復の両立", family:"mage", from:["wizard","cleric","alchemist"] },
+    fencer: { name:"フェンサー", hp:42, atk:14, def:8, spd:12, face:"mina", skills:["lunge","footwork"], tier:2, specialty:"細剣による速攻", family:"sword", from:["sword"] },
+    knight: { name:"ナイト", hp:60, atk:9, def:16, spd:5, face:"gald", skills:["bastion","bash"], tier:2, specialty:"盾での持久戦", family:"warrior", from:["sword","warrior","guard"] },
+    cleric: { name:"回復術師", hp:32, atk:6, def:7, spd:9, face:"popo", skills:["prayer","ward"], tier:2, specialty:"祈りによる回復", family:"healer", from:["healer","apothecary"] },
     swordmaster: { name:"剣豪", hp:46, atk:18, def:9, spd:15, face:"shusai", skills:["iai","parry"] },
     princess: { name:"姫騎士", hp:58, atk:11, def:18, spd:8, face:"yuria", skills:["royalWard","aid"] },
     exorcist: { name:"退魔忍", hp:38, atk:11, def:7, spd:17, spirit:20, curseWard:true, face:"riina", skills:["sealStrike","footwork","ward"] },
@@ -23,17 +23,79 @@ const Guild = (() => {
     salaryman: { name:"サラリーマン", hp:43, atk:9, def:9, spd:10, dex:16, face:"tanaka", skills:["appraise","aid","focus"] },
     idol: { name:"アイドル", hp:33, atk:7, def:6, spd:14, spirit:16, face:"shiina", skills:["encore","song","footwork"] },
     chef: { name:"料理人", hp:42, atk:10, def:8, spd:8, dex:14, face:"goto", skills:["hotSoup","cleave","salve"] },
-    thief: {name:"盗賊", hp:30, atk:10, def:5, spd:14, face:"shion", skills:["scout","hide","slash"], detect:true},
-    druid: {name:"ドルイド", hp:32, atk:7, def:7, spd:9, face:"popo", skills:["renew","ward","focus"], detect:true},
-    beastmaster: {name:"獣使い", hp:38, atk:10, def:8, spd:10, face:"gald", skills:["scout","aim","rally"], detect:true},
-    ranger: { name:"レンジャー", hp:36, atk:12, def:7, spd:14, face:"shion", skills:["volley","wind"], forage:true }
+    thief: {name:"盗賊", hp:30, atk:10, def:5, spd:14, face:"shion", skills:["scout","hide","slash"], detect:true, tier:1, specialty:"罠の感知と先手" },
+    druid: {name:"ドルイド", hp:32, atk:7, def:7, spd:9, face:"popo", skills:["renew","ward","focus"], detect:true, tier:2, specialty:"自然の加護と罠の感知", family:"healer", from:["healer","mage"] },
+    beastmaster: {name:"獣使い", hp:38, atk:10, def:8, spd:10, face:"gald", skills:["scout","aim","rally"], detect:true, tier:2, specialty:"獣との連携と罠の感知", family:"hunter", from:["hunter"] },
+    ranger: { name:"レンジャー", hp:36, atk:12, def:7, spd:14, face:"shion", skills:["volley","wind"], forage:true, tier:2, specialty:"弓の連射と採集", family:"hunter", from:["hunter","thief"] },
+    berserker: {name:"狂戦士", tier:2, from:["warrior","fighter"], family:"warrior", specialty:"大戦斧の一撃",
+      hp:54, atk:17, def:7, spd:8, face:"gald", skills:["fury","cleave"]},
+    assassin: {name:"アサシン", tier:2, from:["thief"], family:"thief", specialty:"短剣での先制攻撃",
+      hp:34, atk:13, def:6, spd:17, face:"shion", skills:["ambush","hide"], dex:13},
+    wizard: {name:"魔法使い", tier:2, from:["mage"], family:"mage", specialty:"魔導書による火炎術",
+      hp:30, atk:10, def:5, spd:9, face:"popo", skills:["flare","focus"], magic:14, spirit:18},
+    monk: {name:"モンク", tier:2, from:["fighter"], family:"fighter", specialty:"手甲での連撃",
+      hp:44, atk:13, def:9, spd:13, face:"mina", skills:["palm","footwork"]},
+    minstrel: {name:"吟遊詩人", tier:2, from:["bard"], family:"bard", specialty:"竪琴による行動支援",
+      hp:36, atk:8, def:7, spd:13, face:"shion", skills:["ballad","song"], spirit:17},
+    alchemist: {name:"錬金術師", tier:2, from:["apothecary"], family:"apothecary", specialty:"薬液での治療",
+      hp:36, atk:8, def:8, spd:10, face:"popo", skills:["elixir","salve"], magic:12, dex:12},
+    paladin: {name:"聖騎士", tier:3, from:["knight"], family:"warrior", specialty:"大盾での防御と回復",
+      hp:64, atk:13, def:19, spd:7, face:"gald", skills:["aegis","prayer"], spirit:16},
+    darkKnight: {name:"暗黒騎士", tier:3, from:["berserker","knight"], family:"warrior", specialty:"重装での両手剣攻撃",
+      hp:58, atk:19, def:13, spd:8, face:"gald", skills:["darkBlade","bastion"]},
+    executioner: {name:"執行者", tier:3, from:["assassin","berserker"], family:"warrior", specialty:"大鎌による強打",
+      hp:47, atk:20, def:9, spd:12, face:"gald", skills:["reap","counter"]},
+    saint: {name:"聖者", tier:3, from:["cleric"], family:"healer", specialty:"聖杖での回復と守護",
+      hp:38, atk:7, def:10, spd:10, face:"popo", skills:["benediction","ward"], magic:18, spirit:22, names:{female:"聖女",male:"聖人"}},
+    samurai: {name:"侍", tier:3, from:["fencer","monk"], family:"sword", specialty:"刀による居合",
+      hp:48, atk:17, def:10, spd:15, face:"mina", skills:["drawCut","parry"]},
+    ninja: {name:"忍者", tier:3, from:["assassin"], family:"thief", specialty:"暗器による速攻",
+      hp:39, atk:15, def:8, spd:20, face:"shion", skills:["shuriken","hide"], dex:17},
+    archmage: {name:"大魔導師", tier:3, from:["wizard"], family:"mage", specialty:"宝珠による攻撃魔術",
+      hp:34, atk:13, def:6, spd:10, face:"popo", skills:["starfire","flare"], magic:20, spirit:20},
+    summoner: {name:"召喚士", tier:3, from:["druid","beastmaster"], family:"mage", specialty:"召喚獣による攻守",
+      hp:40, atk:11, def:9, spd:11, face:"popo", skills:["spiritFang","ward"], magic:16, spirit:18},
+    fistSaint: {name:"拳聖", tier:3, from:["monk"], family:"fighter", specialty:"鉄甲による連撃",
+      hp:49, atk:17, def:11, spd:16, face:"mina", skills:["ironFist","palm"]},
+    bowSaint: {name:"弓聖", tier:3, from:["ranger"], family:"hunter", specialty:"大弓での精密射撃",
+      hp:41, atk:15, def:8, spd:16, face:"shion", skills:["piercingArrow","volley"], dex:18, forage:true},
+    diva: {name:"楽聖", tier:3, from:["minstrel"], family:"bard", specialty:"大竪琴による支援と回復",
+      hp:39, atk:9, def:9, spd:15, face:"shion", skills:["hymn","ballad"], spirit:20, names:{female:"歌姫",male:"楽聖"}},
+    hero: {name:"勇者", tier:4, from:["paladin"], family:"sword", specialty:"剣と盾での攻防",
+      hp:68, atk:20, def:18, spd:13, face:"mina", skills:["heroicBlade","aegis"], otherAdvanced:true},
+    demon_lord: {name:"魔王", tier:4, from:["darkKnight","executioner","archmage"], family:"mage", specialty:"魔術と重打",
+      hp:58, atk:21, def:13, spd:12, face:"popo", skills:["abyss","darkBlade"], magic:21, spirit:20},
+    bladeSaint: {name:"剣聖", tier:4, from:["samurai"], family:"sword", specialty:"大太刀の一閃",
+      hp:52, atk:22, def:12, spd:18, face:"mina", skills:["crescent","drawCut"], requires:["fencer"]},
+    dragonKnight: {name:"竜騎士", tier:4, from:["paladin"], family:"warrior", specialty:"突撃槍と重装防御",
+      hp:65, atk:20, def:17, spd:12, face:"gald", skills:["skyLance","bastion"], requires:["beastmaster"]},
+    greatSage: {name:"大賢者", tier:4, from:["sage","archmage"], family:"mage", specialty:"攻撃魔術と大回復",
+      hp:42, atk:15, def:10, spd:13, face:"popo", skills:["astralLight","benediction"], magic:23, spirit:24, requires:["sage","archmage"]},
+    spirit_lord: {name:"精霊王", tier:4, from:["summoner"], family:"healer", specialty:"精霊の守護と召喚",
+      hp:46, atk:13, def:12, spd:15, face:"popo", skills:["spiritVeil","spiritFang"], magic:20, spirit:24, requires:["druid"], names:{female:"精霊女王",male:"精霊王"}},
+    divineBow: {name:"神弓", tier:4, from:["bowSaint"], family:"hunter", specialty:"翼弓での遠距離攻撃",
+      hp:46, atk:18, def:10, spd:19, face:"shion", skills:["skyArrow","wind"], dex:23, forage:true},
+    conqueror: {name:"覇王", tier:4, from:["fistSaint"], family:"fighter", specialty:"闘気を込めた拳撃",
+      hp:58, atk:22, def:14, spd:17, face:"mina", skills:["sovereignFist","ironFist"]},
+    savior: {name:"救世主", tier:4, from:["saint","diva"], family:"healer", specialty:"聖鐘による回復と加護",
+      hp:46, atk:10, def:12, spd:15, face:"popo", skills:["salvation","hymn"], magic:21, spirit:24},
+    magatsu: {name:"禍津刀神", tier:4, from:["samurai"], family:"sword", specialty:"刀と采配による先陣指揮",
+      hp:56, atk:20, def:15, spd:16, face:"mina", skills:["warBanner","drawCut"]},
+    agito: {name:"アギト", tier:4, from:["ninja"], family:"thief", specialty:"暗器と分身による奇襲",
+      hp:44, atk:19, def:9, spd:24, face:"shion", skills:["shadowFang","shuriken"], dex:22}
   };
   const regularJobs = ["sword","guard","healer","hunter","mage","thief","druid","beastmaster"];
-  const variantJobs = ["sword","warrior","thief","healer","mage","fighter","hunter","bard","apothecary"];
-  const startingJobs = [...new Set([...regularJobs,...variantJobs])];
+  const startingJobs = ["sword","warrior","thief","healer","mage","fighter","hunter","bard","apothecary"];
+  const tierNames = ["従来職","下位職","中級職","上級職","レジェンド職"];
+  const tierLevels = [1,1,2,5,10];
+  const treeJobs = Object.keys(jobs).filter(id => jobs[id].tier > 0);
+  const variantJobs = treeJobs;
+  const jobName = (id,sex) => jobs[id].names?.[sex] || jobs[id].name;
+  // Before branching, the Academy offered just these five advanced courses.
+  const academyCourses = {sword:"fencer",guard:"knight",healer:"cleric",hunter:"ranger",mage:"sage"};
   const hairColors = {gold:"金", silver:"銀", black:"黒", brown:"茶"};
   function variantJob(job) {
-    return variantJobs.find(id => id === job || jobs[id].next === job);
+    return variantJobs.includes(job) ? job : undefined;
   }
   function characterArt(p) {
     const job = variantJob(p.job);
@@ -62,9 +124,36 @@ const Guild = (() => {
     shrinePrayer: {name:"鈴の祈り", heal:9},
     warCry: {name:"覇王の号令", spd:5}, appraise: {name:"弱点の見積もり", atk:3},
     encore: {name:"とっておきの応援歌", def:7}, hotSoup: {name:"まかないスープ", heal:7},
+    fury: {name:"激昂斬", atk:5},
+    ambush: {name:"影突き", atk:5},
+    palm: {name:"双掌打", atk:5},
+    ballad: {name:"旅人のバラード", spd:5},
+    elixir: {name:"練薬手当", heal:8},
+    aegis: {name:"聖盾の誓い", def:10},
+    darkBlade: {name:"暗黒斬", atk:7},
+    reap: {name:"断罪の大鎌", atk:7},
+    benediction: {name:"祝福の祈り", heal:10},
+    drawCut: {name:"抜刀一閃", atk:7},
+    shuriken: {name:"手裏剣", atk:5},
+    starfire: {name:"星炎術", atk:7},
+    spiritFang: {name:"召喚獣の牙", atk:6},
+    ironFist: {name:"金剛拳", atk:7},
+    piercingArrow: {name:"貫きの矢", atk:6},
+    hymn: {name:"聖歌", heal:9},
+    heroicBlade: {name:"勇気の剣", atk:9},
+    abyss: {name:"深淵の炎", atk:8},
+    crescent: {name:"月輪斬", atk:10},
+    skyLance: {name:"飛竜突き", atk:9},
+    astralLight: {name:"星界の光", atk:8},
+    spiritVeil: {name:"精霊の帳", def:11},
+    skyArrow: {name:"天翔の矢", atk:8},
+    sovereignFist: {name:"覇王拳", atk:10},
+    salvation: {name:"救済の鐘", heal:12},
+    warBanner: {name:"采配の風", spd:8},
+    shadowFang: {name:"影牙", atk:8},
     volley: {name:"連射", atk:5}, wind: {name:"風読み", spd:5}
   };
-  const skillLimit = 3, promotionLevel = 2, resetCost = 30;
+  const skillLimit = 3, promotionLevel = tierLevels[2], resetCost = 30;
   const statGains = {hp:4, atk:1, def:1, spd:1};
   // Birthdays and workshop practice use the original 52-position calendar.
   const calendarUnits = 52, weeksPerYear = 4, yearLengths = [1,4,13,52];
@@ -87,13 +176,13 @@ const Guild = (() => {
       growth:{hp:1,atk:1,def:1,spd:1,magic:1,spirit:1,dex:1}, innate:{}, favored:[], description:"どの能力も均等に伸びる。"},
     elf:{name:"エルフ", adult:25, lifespan:700, decline:null, annualLoss:0, trainingYears:32, learning:.96,
       growth:{hp:.85,atk:.8,def:.85,spd:1.2,magic:1.5,spirit:1.5,dex:1.4}, innate:{spd:2,magic:3,spirit:3,dex:3,resist:2},
-      favored:["mage","sage","healer","cleric","hunter","ranger"], description:"魔力・精神・器用が伸びる。どの職でも俊足で、詠唱攻撃に耐性がある。"},
+      favored:["mage","sage","healer","cleric","hunter","ranger","wizard","archmage","greatSage","saint","savior","bowSaint","divineBow","summoner","spirit_lord"], description:"魔力・精神・器用が伸びる。どの職でも俊足で、詠唱攻撃に耐性がある。"},
     dwarf:{name:"ドワーフ", adult:22, lifespan:240, decline:145, annualLoss:1, trainingYears:17, learning:.95,
       growth:{hp:1.4,atk:1.35,def:1.3,spd:.85,magic:.8,spirit:1,dex:1}, innate:{hp:3,atk:1,def:1},
-      favored:["guard","knight","sword","fencer"], description:"力と体力に優れ、守りが堅い。老年期の衰えは緩やか。"},
+      favored:["guard","knight","sword","fencer","warrior","berserker","paladin","darkKnight","dragonKnight","hero"], description:"力と体力に優れ、守りが堅い。老年期の衰えは緩やか。"},
     halfling:{name:"小人族", adult:16, lifespan:65, decline:38, annualLoss:3, trainingYears:6, learning:1.08,
       growth:{hp:.9,atk:.9,def:.9,spd:1.4,magic:1,spirit:1,dex:1.5}, innate:{spd:1,dex:3},
-      favored:["hunter","ranger","fencer"], description:"足が速く手先が器用。若いうちに伸び、早く老年期を迎える。"}
+      favored:["hunter","ranger","fencer","thief","assassin","ninja","agito","bowSaint","divineBow"], description:"足が速く手先が器用。若いうちに伸び、早く老年期を迎える。"}
   };
   const raceOf = p => species[p.species] || species.human;
   const ageYears = week => Math.floor((week-1)/calendarUnits);
@@ -645,8 +734,8 @@ const Guild = (() => {
     item.wearer = id || null;
   }
   function preferredSlot(job) {
-    if (["guard","knight","princess"].includes(job)) return "armor";
-    if (["healer","cleric","mage","sage","druid"].includes(job)) return "charm";
+    if (["guard","knight","princess","paladin","darkKnight","dragonKnight","hero"].includes(job)) return "armor";
+    if (["healer","cleric","mage","sage","druid"].includes(job) || (jobs[job]?.tier && jobs[job].magic >= 12)) return "charm";
     return "weapon";
   }
   // Compare personal combat bonuses (3 HP count as one point).
@@ -972,6 +1061,24 @@ const Guild = (() => {
     p.birthdayWeek ??= 1;
     p.xpRemainder ??= 0;
   }
+  // Old saves have plain Japanese journal entries instead of job IDs. Read only
+  // the two messages the former job-change actions wrote, leaving the journal intact.
+  function restoreJobHistory(p) {
+    if (!jobs[p.job]) return;
+    if (!p.jobHistory) {
+      const previous = [];
+      for (const entry of p.career || []) {
+        const match = /^(.+?)から(.+?)に(?:転職|職業を変更)。$/.exec(entry.message);
+        if (!match) continue;
+        for (const name of match.slice(1)) {
+          const id = Object.keys(jobs).find(key => jobs[key].name === name);
+          if (id) previous.push(id);
+        }
+      }
+      p.jobHistory = [...new Set(previous)];
+    }
+    if (!p.jobHistory.includes(p.job)) p.jobHistory.push(p.job);
+  }
   function restoreCharacter(p) {
     restoreAge(p);
     restoreMorale(p);
@@ -994,6 +1101,7 @@ const Guild = (() => {
     p.backstory ??= "";
     p.memo ??= "";
     p.career ??= [];
+    restoreJobHistory(p);
     p.allocation ??= {hp:0, atk:0, def:0, spd:0};
     p.skills ??= [jobs[p.job].skills[0]];
     return p;
@@ -1017,7 +1125,7 @@ const Guild = (() => {
     if (fields?.epithet) setCharacterNames(p, {nickname:p.nickname, epithet:fields.epithet});
     p.career.push({week, message, ...fields});
   }
-  const recordJoining = (p, week) => record(p, week, jobs[p.job].name + "として入団し、" + p.skills.map(id => abilities[id].name).join("・") + "を習得。");
+  const recordJoining = (p, week) => record(p, week, jobName(p.job,p.sex) + "として入団し、" + p.skills.map(id => abilities[id].name).join("・") + "を習得。");
   const recruit = s => s?.candidate || makePerson("shion", "シオン", "hunter", "careful", "私", "polite");
   const defaultRanks = ["見習い","一人前","熟練","達人","英雄"];
   const examFocuses = {practice:"実技", knowledge:"知識", record:"実績審査", escort:"同行審査"};
@@ -1211,7 +1319,7 @@ const Guild = (() => {
     const guest = candidates[0];
     if (!guest) return;
     const first = !visits[guest.id];
-    const message = first ? uniqueGuests[guest.id].letter : jobs[guest.job].name + guest.name + "が再びホールを訪れました。";
+    const message = first ? uniqueGuests[guest.id].letter : jobName(guest.job,guest.sex) + guest.name + "が再びホールを訪れました。";
     s.visitors.push(guest.id);
     visits[guest.id] = s.week;
     if (first) record(guest,s.week,message,{firstVisit:true});
@@ -1364,7 +1472,9 @@ const Guild = (() => {
   }
   const skillAxis = {ember:"magic",flare:"magic",renew:"magic",aid:"magic",prayer:"magic",ward:"spirit",
     aim:"dex",volley:"dex",scout:"dex",wind:"dex",sealStrike:"spirit",shrinePrayer:"magic",
-    appraise:"dex",encore:"spirit",hotSoup:"dex"};
+    appraise:"dex",encore:"spirit",hotSoup:"dex",elixir:"dex",benediction:"magic",shuriken:"dex",
+    starfire:"magic",spiritFang:"magic",piercingArrow:"dex",hymn:"spirit",abyss:"magic",astralLight:"magic",
+    spiritVeil:"spirit",skyArrow:"dex",salvation:"magic",shadowFang:"dex"};
   function abilityPower(p,id,effect) {
     const power = abilities[id]?.[effect] || 0;
     const axis = skillAxis[id];
@@ -1390,7 +1500,7 @@ const Guild = (() => {
     for (const key of Object.keys(statGains)) p.allocation[key] = 0;
   }
   function learnableSkills(p,s) {
-    const advanced = s?.town.landmark === "academy" ? jobs[jobs[p.job].next]?.skills || [] : [];
+    const advanced = s?.town.landmark === "academy" ? jobs[academyCourses[p.job]]?.skills || [] : [];
     return [...new Set([...jobs[p.job].skills, ...advanced, ...(p.skillTalent ? [p.skillTalent] : [])])];
   }
   function learnAbility(s, id, skill) {
@@ -1399,11 +1509,38 @@ const Guild = (() => {
     p.skills.push(skill);
     record(p, s.week, abilities[skill].name + "を習得。");
   }
-  function promote(s, id) {
-    const p = trainingMember(s,id), job = jobs[p.job];
-    check(job.next && p.level >= promotionLevel, "転職条件を満たしていません。");
-    p.job = job.next;
-    record(p, s.week, job.name + "から" + jobs[p.job].name + "に転職。");
+  function promotionStatus(p, target) {
+    const job = jobs[target], history = p.jobHistory || [p.job];
+    if (jobs[p.job].tier == null || job?.tier == null)
+      return {missing:["固有職は転職できません。"]};
+    if (p.job === target) return {missing:["現在の職業です。"]};
+    if (history.includes(target) || job.tier === 1) return {missing:[]};
+    if (!job.from) return {missing:["経験済みの職業だけ復職できます。"]};
+
+    const missing = [], name = id => jobName(id,p.sex);
+    const level = tierLevels[job.tier];
+    if (p.level < level) missing.push(`Lv.${level}まであと${level-p.level}`);
+    if (!job.from.includes(p.job)) missing.push(job.from.map(name).join("／")+"から転職する");
+    for (const id of job.requires || []) {
+      if (!history.includes(id)) missing.push(name(id)+"を経験する");
+    }
+    if (job.otherAdvanced && !history.some(id => jobs[id]?.tier === 3 && id !== "paladin"))
+      missing.push("聖騎士以外の上級職を1職経験する");
+    return {missing};
+  }
+  function changeJob(s,p,target,verb) {
+    const old = p.job;
+    p.job = target;
+    if (!p.jobHistory.includes(target)) p.jobHistory.push(target);
+    record(p,s.week,jobName(old,p.sex)+"から"+jobName(target,p.sex)+"に"+verb+"。");
+  }
+  function promote(s, id, target) {
+    const p = trainingMember(s,id);
+    target ??= jobs[p.job].next;
+    check(target && Object.hasOwn(jobs,target),"転職先を選んでください。");
+    const {missing} = promotionStatus(p,target);
+    check(!missing.length,"転職条件を満たしていません。"+missing.join(" ／ "));
+    changeJob(s,p,target,"転職");
   }
   const fitWeek = p => Math.max(p.readyWeek,p.recovery?.pregnancy || 0);
   const available = (s, p) => !!p && !p.departure && fitWeek(p) <= s.week && p.leaveWeek !== s.week;
@@ -1480,6 +1617,7 @@ const Guild = (() => {
     s.children.forEach(restoreCharacter);
     for (const p of s.alumni) {
       restoreAge(p);
+      restoreJobHistory(p);
       if (p.departure?.kind === "retired") p.retiredWeek ??= p.departure.week;
       p.career ??= [];
       p.rank ??= 1;
@@ -1606,15 +1744,15 @@ const Guild = (() => {
       "現在の職業または登録できる下位職を選んでください。");
     setAppearance(p,data);
     if (p.job !== data.job) {
-      record(p,s.week,jobs[p.job].name+"から"+jobs[data.job].name+"に職業を変更。");
-      p.job = data.job;
+      changeJob(s,p,data.job,"職業を変更");
     }
     if (p.portrait) p.useJobPortrait = !!data.useJobPortrait;
   }
   function register(s, data) {
     check(!weekStarted(s), "登録はその週の最初の出発前にできます。"); check(!knownPerson(s, "custom"), "自作冒険者は1人までです。");
     const name = clean(data.name, 8);
-    check(name && startingJobs.includes(data.job) && Object.hasOwn(traits, data.trait) && Object.hasOwn(tones, data.tone), "名前・職業・性格・口調を確認してください。");
+    // Legacy registration templates also used guard, druid and beastmaster.
+    check(name && (startingJobs.includes(data.job) || regularJobs.includes(data.job)) && Object.hasOwn(traits, data.trait) && Object.hasOwn(tones, data.tone), "名前・職業・性格・口調を確認してください。");
     const race = data.species ?? "human";
     check(Object.hasOwn(species,race), "種族を選んでください。");
     const age = Number(data.age ?? species[race].adult);
@@ -1694,7 +1832,9 @@ const Guild = (() => {
   }
   const sample = values => values[Math.floor(Math.random()*values.length)];
   function familyJob(p) {
-    return startingJobs.find(job => job === p.job || jobs[job].next === p.job) ||
+    if (p.job === "knight" && (p.jobHistory?.includes("guard") || p.jobAffinity === "guard")) return "guard";
+    if (p.job === "guard" || p.jobAffinity === p.job) return p.job;
+    return jobs[p.job]?.family || (startingJobs.includes(p.job) && p.job) ||
       ({swordmaster:"sword", princess:"guard", exorcist:"thief", miko:"healer",
         overlord:"warrior",salaryman:"thief",idol:"bard",chef:"apothecary"})[p.job] || "sword";
   }
@@ -3272,7 +3412,7 @@ const Guild = (() => {
     }
     expireCalls(s);
   }
-  return { variantJob, variantJobs, hairColors, characterArt, editCustomAppearance, defenseSpots, allPlots, plotCapacity, pairedPads, defenseCenter, defenseTypes, defenseStats, defenseOptions, improveDefense, guardPosts, guardPost, assignGuard, terrainAt, partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
+  return { tierNames, tierLevels, treeJobs, jobName, promotionStatus, variantJob, variantJobs, hairColors, characterArt, editCustomAppearance, defenseSpots, allPlots, plotCapacity, pairedPads, defenseCenter, defenseTypes, defenseStats, defenseOptions, improveDefense, guardPosts, guardPost, assignGuard, terrainAt, partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
