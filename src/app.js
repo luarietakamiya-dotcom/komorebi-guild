@@ -8,7 +8,11 @@ const stackDemo = params.get("view") === "stack" && params.get("demo") === "1";
 let saveWarning = "", state = Guild.initial();
 try {
   const saved = !demo && !stackDemo && localStorage.getItem(storageKey);
-  if (saved) state = Guild.restore(JSON.parse(saved));
+  if (saved) {
+    state = Guild.restore(JSON.parse(saved));
+    const migrated = JSON.stringify(state);
+    if (migrated !== saved) localStorage.setItem(storageKey,migrated);
+  }
 } catch { saveWarning = "保存を利用できないため、この画面で続けます。"; }
 let page = demo ? "hall" : "town", modal = "", draft = null, customImage = "", imageBusy = false, imageTicket = 0;
 const panes = { town: ["home","町の風景"], hall: ["scroll","ギルドホール"], roster: ["team","冒険者名簿"], shops: ["hammer","町のショップ"], mail: ["mail","伝書箱"], history: ["book","帰還記録"] };
@@ -25,7 +29,11 @@ const urgent = () => g.emergencyParty(state);
 const who = id => g.knownPerson(state, id);
 const assetUrl = id => `assets/${id}.webp`;
 const asset = (id, cls = "", alt = "") => `<img src="${assetUrl(id)}" class="${cls}" alt="${esc(alt)}">`;
-const portrait = (p, cls = "") => `<img class="avatar ${cls}" alt="${esc(p.name)}" src="${esc((!p.useJobPortrait && p.portrait) || assetUrl(g.characterArt(p).portrait))}">`;
+const hasUploadedPortrait = p => p.id === "custom" && /^data:image\/(png|jpeg|webp);base64,/i.test(p.portrait);
+function portrait(p, cls = "") {
+  const src = hasUploadedPortrait(p) && !p.useJobPortrait ? p.portrait : assetUrl(g.characterArt(p).portrait);
+  return `<img class="avatar ${cls}" alt="${esc(p.name)}" src="${esc(src)}">`;
+}
 const action = (id, label, cls = "btn", attrs = "") => `<button type="button" class="${cls}" data-action="${id}" ${attrs}>${label}</button>`;
 const tag = (txt, cls = "") => `<span class="tag ${cls}">${txt}</span>`;
 const title = (symbol, txt, end = "") => `<div class="section-title"><h2>${icon(symbol,23)}${txt}</h2>${end}</div>`;
@@ -920,7 +928,7 @@ function townView(people,taxes) {
       <div><dt>${icon("map",16)} 今週の観光客</dt><dd>${taxes.visitors}<small> 人</small></dd></div>
     </dl><details class="rules"><summary>今週の税収見込み　${taxes.total} G</summary>
       <p>${tourismDetails(taxes)}</p><p>週末にギルド金庫へ入金します。観光客は観光施設・名声・ギルドランク・町の建築数に応じて増えます。</p></details>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
-    <ul>${people.map(p => `<li>${(p.voice.hair || p.voice.portrait) ? portrait(p.voice,"resident-portrait") : asset(g.uniqueGuests[p.id] ? p.sprite : "px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
+    <ul>${people.map(p => `<li>${p.voice.job ? portrait(p.voice,"resident-portrait") : asset("px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
 }
 
 function sceneChatterRate(kind) {
@@ -1446,26 +1454,19 @@ function jobField(p, id) {
   const labels = Object.fromEntries(choices.map(job => [job,g.jobName(job,p.sex)]));
   return `<label>職業<select name="job" id="${id}">${options(labels,p.job)}</select></label>`;
 }
-function appearanceFields(p, allowClassic = false) {
-  const colors = allowClassic ? {"":"従来の姿",...g.hairColors} : g.hairColors;
-  return `<div class="form-pair"><label>性別<select name="sex">${options({female:"女性",male:"男性",unspecified:"未指定"},p.sex)}</select></label>
-    <label>髪色<select name="hair">${options(colors,p.hair || "")}</select></label></div>`;
+function appearanceFields(p) {
+  return `<div class="form-pair"><label>性別<select name="sex">${options({female:"女性",male:"男性"},p.sex)}</select></label>
+    <label>髪色<select name="hair">${options(g.hairColors,p.hair)}</select></label></div>`;
 }
 function appearanceForm(p) {
-  return modalHead("team","職業・外見を編集")+`<form id="appearance-editor">${jobField(p,"appearance-job")}${appearanceFields(p,true)}
-    ${p.portrait ? `<label><input type="checkbox" name="useJobPortrait" ${p.useJobPortrait ? "checked" : ""}>登録した顔画像の代わりに職業の顔絵を使う</label>` : ""}
+  return modalHead("team","職業・外見を編集")+`<form id="appearance-editor">${jobField(p,"appearance-job")}${appearanceFields(p)}
+    ${hasUploadedPortrait(p) ? `<label><input type="checkbox" name="useJobPortrait" ${p.useJobPortrait ? "checked" : ""}>登録した顔画像の代わりに職業の顔絵を使う</label>` : ""}
     <div id="appearance-preview"></div><button class="primary wide" type="submit">変更を保存</button>
     ${action("character","人物手帳に戻る","btn", 'data-id="custom"')}</form>`;
 }
-function readAppearanceForm(form) {
-  if (form.elements?.hair) {
-    form.elements.hair.disabled = !g.variantJob(form.elements.job.value) || form.elements.sex.value === "unspecified";
-  }
-  return Object.fromEntries(new FormData(form));
-}
 function updateEditPreview() {
   const form = $("#appearance-editor");
-  const p = {...who("custom"),...readAppearanceForm(form)};
+  const p = {...who("custom"),...Object.fromEntries(new FormData(form))};
   p.useJobPortrait = !!form.elements?.useJobPortrait?.checked;
   if (g.jobs[p.job].names && form.elements?.job)
     form.elements.job.selectedOptions[0].textContent = g.jobName(p.job,p.sex);
@@ -1495,7 +1496,7 @@ function createForm() {
 }
 function updatePreview() {
   const form=$("#creator"); if(!form) return;
-  const p=readAppearanceForm(form); p.pronoun ||= "私"; p.master ||= "マスター"; p.portrait=customImage;
+  const p={...Object.fromEntries(new FormData(form)),id:"custom"}; p.pronoun ||= "私"; p.master ||= "マスター"; p.portrait=customImage;
   const friend = state.roster[0] ? g.familiarName(state.roster[0]) : "仲間";
   const race = p.species || "human", r = g.species[race], age = Number(p.age ?? r.adult);
   const training = g.entryTraining(p.job,race,age,p.initialSkill);

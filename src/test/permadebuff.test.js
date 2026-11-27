@@ -201,7 +201,7 @@ test("旧セーブの症状と療養期限を保持し、旧自作キャラの�
   }
   const saved=reload(s);
   assert.equal(G.person(saved,"mina").sex,"female");
-  assert.equal(G.person(saved,"custom").sex,"unspecified");
+  assert.ok(["female","male"].includes(G.person(saved,"custom").sex));
   assert.equal(G.fitWeek(saved.roster[0]),5);
   assert.deepEqual(saved.roster[0].debuffs,{leg:25});
   assert.deepEqual(reload(saved),saved);

@@ -1481,3 +1481,37 @@ test("商業カタログで二軒建てし、観光の見込みと確定した�
   assert.match(restored.html("#screen"),/第1週　ギルド金庫 ＋35 G/);
   assert.match(restored.html("#screen"),/観光客 11人 ・ 町内消費税 22 G（1人2 G）・ 土産物税 13 G/);
 });
+
+test("固定顔が残る一般隊長を移行し、名簿・手帳・伝書・編成と町・遠征の絵を揃える", () => {
+  const s = Guild.initial(), p = s.registry.find(p => p.job === "beastmaster");
+  s.registry = s.registry.filter(other => other !== p);
+  s.visitors = s.visitors.filter(id => id !== p.id);
+  Object.assign(p,{sex:"female",hair:"pink",portrait:"old-fixed-face.webp"});
+  s.roster.push(p);
+  s.clock.paused = true;
+  Guild.configure(s,[p.id],p.id,"safe",0);
+  const game = openGame(JSON.stringify(s));
+  const migrated = Guild.person(game.state(),p.id);
+  assert.equal(migrated.sex,"female");
+  assert.ok(Object.hasOwn(Guild.hairColors,migrated.hair));
+  const stack = "beastmaster_female_"+migrated.hair, src = 'src="assets/portrait_'+stack+'.webp"';
+  function checkFace(selector) {
+    const html = game.html(selector);
+    assert.ok(html.includes(src));
+    assert.ok(!html.includes("old-fixed-face.webp"));
+  }
+  assert.equal(game.townSprite(p.id),stack);
+  checkFace("#screen");
+  game.click("nav","roster");
+  checkFace("#screen");
+  game.click("character",p.id);
+  checkFace("#dialog-body");
+  game.escape();
+  game.click("nav","mail");
+  checkFace("#screen");
+  game.click("prepare");
+  checkFace("#dialog-body");
+  game.click("depart");
+  assert.equal(game.expeditionSprite(p.id),stack);
+  assert.equal(game.reload().expeditionSprite(p.id),stack);
+});

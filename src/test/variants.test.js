@@ -36,14 +36,20 @@ test("下位9職の登録・編集で同じ外見を選べ、全72組の顔と32
   assert.equal(models.size,72);
 });
 
-test("旧セーブの顔・歩行とアップロード画像を保持し、編集・転職後も保存できる", () => {
+test("旧セーブの一般冒険者に髪色を補い、専用絵とアップロード画像を保持して編集・転職できる", () => {
   const state = G.initial();
   G.register(state,{...profile,job:"sword",sex:"female",portrait:"data:image/png;base64,AA=="});
+  for (const member of [...state.roster,...state.registry,state.candidate]) delete member.hair;
   const s = reload(state), p = G.person(s,"custom");
   for (const member of [...s.roster,...s.registry,s.candidate]) {
-    assert.equal(member.hair,undefined);
-    const face = G.jobs[member.job].face;
-    assert.deepEqual(G.characterArt(member),{stack:face,portrait:face});
+    if (["mina","gald","popo","shion"].includes(member.id) || G.uniqueGuests[member.id]) {
+      assert.deepEqual(G.characterArt(member),{stack:member.id,portrait:member.id});
+    } else {
+      assert.ok(Object.hasOwn(G.hairColors,member.hair));
+      const job = member.job === "guard" ? "knight" : member.job;
+      const stack = [job,member.sex,member.hair].join("_");
+      assert.deepEqual(G.characterArt(member),{stack,portrait:"portrait_"+stack});
+    }
   }
   const uploaded = p.portrait;
   G.editCustomAppearance(s,{job:"sword",sex:"female",hair:"silver",useJobPortrait:true});
@@ -114,4 +120,37 @@ test("転職と復元を通じて44職×男女×4色の顔絵・32層モデル�
   }
   assert.equal(faces.size,352);
   assert.equal(stacks.size,352);
+});
+
+test("一般来訪者と子供の生成・移行で有効な外見を持ち、他の人物データと既存の選択を保つ", () => {
+  const s = G.initial();
+  const guests = s.registry.filter(p => !G.uniqueGuests[p.id]);
+  const child = G.welcomeChild(s,"mina","gald","ハル");
+  for (const p of [...guests,child]) {
+    assert.ok(["male","female"].includes(p.sex));
+    assert.ok(Object.hasOwn(G.hairColors,p.hair));
+  }
+  assert.deepEqual(new Set(guests.map(p => p.hair)),new Set(Object.keys(G.hairColors)));
+  const retired = guests[1];
+  s.registry = s.registry.filter(p => p !== retired);
+  Object.assign(retired,{departure:{kind:"retired",week:1},retiredWeek:1,hair:"blue"});
+  s.alumni.push(retired);
+  Object.assign(guests[0],{hair:"silver",sex:"unspecified"});
+  delete child.hair;
+  delete child.sex;
+  const before = structuredClone([retired,guests[0],child]);
+  const saved = reload(s);
+  const recovered = [saved.alumni[0],saved.registry.find(p => p.id === guests[0].id),saved.children[0]];
+  for (const [i,p] of recovered.entries()) {
+    const {sex,hair} = p;
+    assert.deepEqual(p,{...before[i],sex,hair});
+    assert.ok(["male","female"].includes(sex));
+    assert.ok(Object.hasOwn(G.hairColors,hair));
+    const job = p.job === "guard" ? "knight" : p.job;
+    const stack = [job,sex,hair].join("_");
+    assert.deepEqual(G.characterArt(p),{stack,portrait:"portrait_"+stack});
+  }
+  assert.equal(recovered[0].sex,retired.sex);
+  assert.equal(recovered[1].hair,"silver");
+  assert.deepEqual(reload(saved),saved);
 });

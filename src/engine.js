@@ -96,16 +96,34 @@ const Guild = (() => {
   const academyCourses = {sword:"fencer",guard:"knight",healer:"cleric",hunter:"ranger",mage:"sage"};
   const hairColors = {gold:"金", silver:"銀", black:"黒", brown:"茶"};
   function variantJob(job) {
-    return variantJobs.includes(job) ? job : undefined;
+    // The legacy shield bearer shares the sword-and-shield knight artwork.
+    return job === "guard" ? "knight" : variantJobs.includes(job) ? job : undefined;
+  }
+  const hairKeys = Object.keys(hairColors);
+  function hasSignatureArt(id) {
+    return ["mina","gald","popo","shion"].includes(id) || Object.hasOwn(uniqueGuests,id);
+  }
+  function appearance(p) {
+    const serial = /^(?:guest|child)-(\d+)$/.exec(p.id);
+    const index = serial ? Number(serial[1]) : 0;
+    const female = serial ? index % 2 === 1 : ["mina","yuria","riina","yukina","shiina","meniya","custom"].includes(p.id);
+    const defaultSex = female ? "female" : "male";
+    const sex = ["female","male"].includes(p.sex) ? p.sex : defaultSex;
+    // Rotate the four colors across pairs and across repeats of the eight guest jobs.
+    const colorIndex = (Math.floor(index/2) + Math.floor(index/8)) % hairKeys.length;
+    const hair = Object.hasOwn(hairColors,p.hair) ? p.hair : hairKeys[colorIndex];
+    return {sex,hair};
+  }
+  function restoreAppearance(p) {
+    const {sex,hair} = appearance(p);
+    p.sex = sex;
+    if (!hasSignatureArt(p.id)) p.hair = hair;
   }
   function characterArt(p) {
-    const job = variantJob(p.job);
-    if (job && ["male","female"].includes(p.sex) && Object.hasOwn(hairColors,p.hair)) {
-      const stack = [job,p.sex,p.hair].join("_");
-      return {stack, portrait:"portrait_"+stack};
-    }
-    const face = jobs[p.job].face;
-    return {stack:face, portrait:face};
+    if (hasSignatureArt(p.id)) return {stack:p.id, portrait:p.id};
+    const {sex,hair} = appearance(p);
+    const stack = [variantJob(p.job),sex,hair].join("_");
+    return {stack, portrait:"portrait_"+stack};
   }
   const abilities = {
     cleave: {name:"斧の一撃", atk:4}, strike: {name:"連拳", atk:3},
@@ -1123,11 +1141,7 @@ const Guild = (() => {
     p.debuffs ??= {};
     p.recovery ??= {};
     p.treatment ??= {};
-    if (!p.sex) {
-      const serial = /^(?:guest|child)-(\d+)$/.exec(p.id);
-      p.sex = serial ? (Number(serial[1])%2 ? "female" : "male") :
-        ["mina","yuria","riina","yukina","shiina","meniya"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
-    }
+    restoreAppearance(p);
     p.injury ??= null;
     p.leaveWeek ??= 0;
     p.gambits = Array.isArray(p.gambits) ? p.gambits.slice(0,gambitLimit) : [];
@@ -1656,6 +1670,7 @@ const Guild = (() => {
     s.roster.forEach(restoreCharacter);
     s.children.forEach(restoreCharacter);
     for (const p of s.alumni) {
+      restoreAppearance(p);
       restoreAge(p);
       restoreJobHistory(p);
       if (p.departure?.kind === "retired") p.retiredWeek ??= p.departure.week;
@@ -1772,12 +1787,10 @@ const Guild = (() => {
     s.gold -= hireCost(p); s.roster.push(p); delete s.candidate;
   }
   function setAppearance(p, data) {
-    const sex = data.sex ?? p.sex, hair = data.hair ?? "";
+    const sex = data.sex ?? p.sex, hair = data.hair ?? p.hair;
     check(["male","female","unspecified"].includes(sex),"性別を選んでください。");
     check(hair === "" || Object.hasOwn(hairColors,hair),"髪色を選んでください。");
-    p.sex = sex;
-    if (hair && variantJob(data.job) && sex !== "unspecified") p.hair = hair;
-    else delete p.hair;
+    Object.assign(p,appearance({...p,sex,hair}));
   }
   function editCustomAppearance(s, data) {
     const p = trainingMember(s,"custom");
