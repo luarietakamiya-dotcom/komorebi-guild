@@ -13,7 +13,7 @@ from PIL import Image
 GAME = Path(__file__).resolve().parents[1]
 SIZE = 32
 COLUMNS = 8
-LAYERS = dict(shusai=32, yuria=32, riina=32, yukina=32, jobava=32, tanaka=32, shiina=32, goto=32,
+LAYERS = dict(shusai=32, yuria=32, riina=32, yukina=32, jobava=32, tanaka=32, shiina=32, goto=32, meniya=32,
               mina=32, shion=32, gald=32, toto=32, popo=32, boar=24)
 
 # Shadow, midtone and sunlit swatches sampled visually from the guild portraits.
@@ -305,6 +305,27 @@ def goto(v):
     v.oval((9.8, 3, 19.5), (2.1, 1.3, 2.7), "ochre")
 
 
+def meniya(v):
+    body(v, "teal", "teal")
+    v.coat(4, 11, (7.8, 5.2), (4.8, 3.9), "teal")
+    v.coat(4, 5, (7.9, 5.3), (7.4, 5), "gold")
+    v.coat(10, 11, (5.9, 4.5), (5.5, 4.3), "gold")
+    v.twig((-4, -2.6, 11), (-10, -4.3, 8), 2, 1.5, "teal")
+    v.twig((-10, -4.3, 8), (-12, -6, 10), 1.5, .8, "gold")
+    face(v, "navy", "navy")
+    v.oval((-3.4, -3.8, 28.2), (3.9, 3.2, 3.8), "navy")
+    v.twig((-6.5, -4, 30.5), (-1, -2.8, 28.8), .9, 1.1, "gold")
+    for side in (-1, 1):
+        v.oval((side*7, 1.7, 20.4), (1, 1, 1.6), "gold")
+    # A raised forearm holds an open vermilion fan, with ribs meeting at the grip.
+    v.twig((6.6, 1.7, 9.3), (8.8, 4, 14.1), 1.8, 1.3, "skin")
+    x, z = v.x - 8.8, v.z - 14.1
+    fan = (z >= 0) & (abs(x) <= z*.85) & (x*x + z*z <= 7.2**2) & (abs(v.y-4.4) < 1)
+    v.paint(fan, "copper", z*.16-.6)
+    ribs = (abs(x) < .55) | (abs(abs(x)-z*.7) < .48)
+    v.paint(fan & (ribs | (x*x + z*z > 6.3**2)), "gold", .6)
+
+
 def shion(v):
     body(v, "leather", "forest")
     cape(v, "forest", "sage", True)
@@ -411,7 +432,7 @@ def boar(v):
 
 
 AUTHORS = dict(shusai=shusai, yuria=yuria, riina=riina, yukina=yukina, jobava=jobava, tanaka=tanaka,
-               shiina=shiina, goto=goto, mina=mina, shion=shion, gald=gald, toto=toto, popo=popo, boar=boar)
+               shiina=shiina, goto=goto, meniya=meniya, mina=mina, shion=shion, gald=gald, toto=toto, popo=popo, boar=boar)
 
 
 def split(name, path, count=None):

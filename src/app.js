@@ -362,7 +362,8 @@ function skillDescription(id,p) {
   if (p) for (const key of ["atk","def","spd","heal"]) a[key] = g.abilityPower(p,id,key);
   const effect = a.heal ? `行動時、傷を負った仲間で残りHPが最も低い1人を${a.heal}回復` :
     a.spd ? `行動順の速さ＋${a.spd}` : a.def ? `被攻撃時の防御＋${a.def}` : `攻撃時の攻撃力＋${a.atk}`;
-  return (a.round ? `第${a.round}ラウンド以降、` : "") + effect;
+  return (a.round ? `第${a.round}ラウンド以降、` : "") + effect +
+    (a.feint ? `。扇で敵を惑わせ、その敵の次の一撃を最大${a.feint}ダメージ軽減` : "");
 }
 function debuffCare(p) {
   return Object.entries(p.debuffs || {}).map(([kind,bonus]) => {

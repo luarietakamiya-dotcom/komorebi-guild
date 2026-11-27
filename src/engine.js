@@ -23,6 +23,7 @@ const Guild = (() => {
     salaryman: { name:"サラリーマン", hp:43, atk:9, def:9, spd:10, dex:16, face:"tanaka", skills:["appraise","aid","focus"] },
     idol: { name:"アイドル", hp:33, atk:7, def:6, spd:14, spirit:16, face:"shiina", skills:["encore","song","footwork"] },
     chef: { name:"料理人", hp:42, atk:10, def:8, spd:8, dex:14, face:"goto", skills:["hotSoup","cleave","salve"] },
+    dancer: { name:"踊り子", hp:35, atk:8, def:6, spd:18, dex:17, face:"meniya", family:"fighter", skills:["fanFeint","circleDance","footwork"] },
     thief: {name:"盗賊", hp:30, atk:10, def:5, spd:14, face:"shion", skills:["scout","hide","slash"], detect:true, tier:1, specialty:"罠の感知と先手" },
     druid: {name:"ドルイド", hp:32, atk:7, def:7, spd:9, face:"popo", skills:["renew","ward","focus"], detect:true, tier:2, specialty:"自然の加護と罠の感知", family:"healer", from:["healer","mage"] },
     beastmaster: {name:"獣使い", hp:38, atk:10, def:8, spd:10, face:"gald", skills:["scout","aim","rally"], detect:true, tier:2, specialty:"獣との連携と罠の感知", family:"hunter", from:["hunter"] },
@@ -124,6 +125,7 @@ const Guild = (() => {
     shrinePrayer: {name:"鈴の祈り", heal:9},
     warCry: {name:"覇王の号令", spd:5}, appraise: {name:"弱点の見積もり", atk:3},
     encore: {name:"とっておきの応援歌", def:7}, hotSoup: {name:"まかないスープ", heal:7},
+    fanFeint: {name:"霞扇の舞", atk:2, feint:4}, circleDance: {name:"誘いの輪舞", spd:5},
     fury: {name:"激昂斬", atk:5},
     ambush: {name:"影突き", atk:5},
     palm: {name:"双掌打", atk:5},
@@ -1093,7 +1095,7 @@ const Guild = (() => {
     if (!p.sex) {
       const serial = /^(?:guest|child)-(\d+)$/.exec(p.id);
       p.sex = serial ? (Number(serial[1])%2 ? "female" : "male") :
-        ["mina","yuria","riina","yukina","shiina"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
+        ["mina","yuria","riina","yukina","shiina","meniya"].includes(p.id) ? "female" : p.id === "custom" ? "unspecified" : "male";
     }
     p.injury ??= null;
     p.leaveWeek ??= 0;
@@ -1248,7 +1250,13 @@ const Guild = (() => {
       invitation:"名声10以上で特別な来訪の候補になります。宿屋か食べ物屋が営業していれば契約できます。",
       letter:"料理人ゴトウが木のおたまを提げてやってきた。「宿か食堂のかまどを貸してくれ。帰ってきた連中に温かいものを出したいんだ」",
       pledge:"町のかまどを預かり、冒険者の帰りをまかないで迎えることになった。",
-      meet:s => fame(s) >= 10, join:s => hasInn(s) || hasWorkingShop(s,"kitchen")}
+      meet:s => fame(s) >= 10, join:s => hasInn(s) || hasWorkingShop(s,"kitchen")},
+    meniya:{species:"human", age:28, name:"メニーヤ", job:"dancer", trait:"bold", pronoun:"私", tone:"casual", ending:"",
+      rank:2, level:3, story:"旅の一座で扇の舞を磨いた踊り子。扇先で敵の視線を誘い、仲間に踏み込む隙を作る。",
+      invitation:"名声17以上で特別な来訪の候補になります。同じ遠征から2人以上が無事に帰った記録があれば契約できます。",
+      letter:"踊り子メニーヤから朱い扇が届いた。「帰ってくる隊の足音って、広場の向こうからでも分かるの。今度は私もその輪に入れてくれる？」",
+      pledge:"隊の帰還を広場で迎え、次は仲間と足並みをそろえて踊ると約束した。",
+      meet:s => fame(s) >= 17, join:s => s.history.some(r => r.unit?.filter(u => u.state === "ok").length >= 2)}
   };
   const regularNames = ["ナギ","ベルタ","カイ","リタ","アオ","リゼ","ダン","エマ","ソラ","ユノ","レン","ネネ","トワ","イオ","メル","ジン","アニカ","セナ","キリ","ロイ"];
   function createRegistry(s) {
@@ -1270,6 +1278,7 @@ const Guild = (() => {
       if (knownPerson(s,id) || s.registry.some(p => p.id === id)) continue;
       const p = makePerson(id,d.name,d.job,d.trait,d.pronoun,d.tone,"マスター",d.ending);
       Object.assign(p,{rank:d.rank, level:Math.max(p.level,d.level), backstory:d.story});
+      if (p.job === "dancer") p.gambits = preset(p,"attack");
       s.registry.push(p);
     }
     s.registry.forEach(restoreCharacter);
@@ -1472,7 +1481,7 @@ const Guild = (() => {
   }
   const skillAxis = {ember:"magic",flare:"magic",renew:"magic",aid:"magic",prayer:"magic",ward:"spirit",
     aim:"dex",volley:"dex",scout:"dex",wind:"dex",sealStrike:"spirit",shrinePrayer:"magic",
-    appraise:"dex",encore:"spirit",hotSoup:"dex",elixir:"dex",benediction:"magic",shuriken:"dex",
+    appraise:"dex",encore:"spirit",hotSoup:"dex",fanFeint:"dex",elixir:"dex",benediction:"magic",shuriken:"dex",
     starfire:"magic",spiritFang:"magic",piercingArrow:"dex",hymn:"spirit",abyss:"magic",astralLight:"magic",
     spiritVeil:"spirit",skyArrow:"dex",salvation:"magic",shadowFang:"dex"};
   function abilityPower(p,id,effect) {
@@ -2242,7 +2251,15 @@ const Guild = (() => {
     f.lastStrike = {target:target.id,actor:u.id};
     const hit = assist + damage(atk,s.wielder === u.id ? bladeMultiplier(s.weaponQuality) : 1,foes[target.kind].def);
     target.hp = Math.max(0,target.hp-hit);
-    write((assist ? person(s,previous.actor).name+"と連携。 " : "") + p.name + "の" + (skill?.name || "攻撃") + "。" + name + "に" + hit + "ダメージ。",target,skill ? "skill" : "attack",hit);
+    if (skill?.feint && target.hp) target.feint = skill.feint;
+    write((assist ? person(s,previous.actor).name+"と連携。 " : "") + p.name + "の" + (skill?.name || "攻撃") + "。" + name + "に" + hit + "ダメージ。" +
+      (skill?.feint && target.hp ? "扇に惑わされ、次の一撃が鈍る。" : ""),target,skill ? "skill" : "attack",hit);
+  }
+  function damageAfterFeint(enemy,hit) {
+    if (!enemy.feint) return hit;
+    const reduced = Math.max(1,hit-enemy.feint);
+    delete enemy.feint;
+    return reduced;
   }
   function enemyTurn(s,team,e,round) {
     const t = team.trip, f = t.fight, stats = foes[e.kind];
@@ -2261,7 +2278,7 @@ const Guild = (() => {
       if (helper && Math.random() < priority(helper)/1000) protector = helper;
     }
     const target = protector || intended;
-    const p = person(s,target.id), hit = damage(stats.atk,1,outfittedStat(s,p,"def") + skillBonus(p,"def",round) + (f.guards[p.id] || 0) + (e.casting ? spellDefense(p) : 0));
+    const p = person(s,target.id), hit = damageAfterFeint(e,damage(stats.atk,1,outfittedStat(s,p,"def") + skillBonus(p,"def",round) + (f.guards[p.id] || 0) + (e.casting ? spellDefense(p) : 0)));
     const intercept = protector ? p.name + "が" + person(s,intended.id).name + "をかばった。" : "";
     if (protector) {
       delete f.covers[protector.id];
@@ -3167,6 +3184,7 @@ const Guild = (() => {
         const power = Math.max(1,Math.ceil(attack/2)-(fight.shaken[p.id] ? 2 : 0))+abilityPower(p,action,"atk")+
           (s.town.landmark==="memorial" ? 3 : 0)+(s.town.landmark==="academy" && pick ? 4 : 0);
         raidStrike(r,p.id,record,target,power,record.lastAction);
+        if (skill?.feint && target.hp) target.feint = skill.feint;
       } else {
         record.support++;
         if (action==="cover") fight.covers[p.id] = target.id;
@@ -3192,8 +3210,8 @@ const Guild = (() => {
       if (!intended) break;
       const u = available.find(a=>fight.covers[a.id]===intended.id) || intended;
       const p = getPerson(u.id);
-      const hit = Math.max(1,7+r.tier+(e.boss ? 5 : 0)-Math.floor(outfittedStat(s,p,"def")/3)-
-        (fight.guards[p.id] || 0)-(s.town.landmark==="baths" ? 2 : 0));
+      const hit = damageAfterFeint(e,Math.max(1,7+r.tier+(e.boss ? 5 : 0)-Math.floor(outfittedStat(s,p,"def")/3)-
+        (fight.guards[p.id] || 0)-(s.town.landmark==="baths" ? 2 : 0)));
       p.missingHP += Math.min(u.hp,hit);
       u.hp = currentHP(s,p);
       if (!u.hp) {

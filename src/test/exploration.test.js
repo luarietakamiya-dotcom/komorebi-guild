@@ -972,7 +972,7 @@ test("ユキナの来訪伝書から契約でき、名簿と人物手帳、町�
   assert.equal(resumed.expeditionSprite("yukina"),"yukina");
 });
 
-test("第2弾の4人は伝書から契約でき、名簿・人物手帳・町・遠征に専用の姿が出る", () => {
+test("第2弾の4人とメニーヤは伝書から契約でき、名簿・人物手帳・町・遠征に専用の姿が出る", () => {
   const s = Guild.initial();
   s.gold = 3000;
   Guild.build(s,"west","inn");
@@ -989,7 +989,7 @@ test("第2弾の4人は伝書から契約でき、名簿・人物手帳・町・
   s.metrics[0] = 22;
   s.metrics[3] = 70;
   Guild.nextWeek(s);
-  for (const id of ["jobava","tanaka","shiina","goto"]) {
+  for (const id of ["jobava","tanaka","shiina","goto","meniya"]) {
     waitForGuest(s,id);
     const game = openGame(JSON.stringify(s)), guest = Guild.uniqueGuests[id];
     game.click("nav","mail");

@@ -5,6 +5,7 @@ const GuildStacks = (() => {
   const characters = {
     shusai: ["シュウサイ", 32], yuria: ["ユーリア", 32], riina: ["リィナ", 32], yukina: ["ユキナ", 32],
     jobava: ["ジョバヴァ", 32], tanaka: ["タナカ", 32], shiina: ["シイナ", 32], goto: ["ゴトウ", 32],
+    meniya: ["メニーヤ", 32],
     mina: ["ミナ", 32], shion: ["シオン", 32], gald: ["ガルド", 32],
     toto: ["トト", 32], popo: ["ポポ", 32], boar: ["苔イノシシ", 24]
   };
