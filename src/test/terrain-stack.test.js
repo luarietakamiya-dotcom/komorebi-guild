@@ -440,3 +440,19 @@ test("増築できる区画では実寸の畑二面が離れて収まり、四�
     }
   }
 });
+
+test("商業施設の二軒建てを水彩・立体の両方で区画に描画できる", async () => {
+  const {maps,voxel,ctx,calls} = game({nativeSize:true});
+  const s = Guild.initial();
+  s.gold = 10000;
+  const sites = Guild.plots.filter(p => p.pairCenters).flatMap(p => p.sites);
+  for (const [i,kind] of Object.keys(Guild.commercialBuildings).entries()) Guild.build(s,sites[i],kind);
+  for (const camera of [null,voxel.townCamera(3)]) {
+    const draw = maps.get("town",maps.townAppearances(s.town),camera);
+    await draw.prepare(id=>id);
+    calls.length = 0;
+    draw(ctx,[]);
+    for (const b of Object.values(Guild.commercialBuildings))
+      assert.ok(calls.some(([img]) => img.name === (camera ? "turn_" : "scenery_")+b.appearance),b.name);
+  }
+});

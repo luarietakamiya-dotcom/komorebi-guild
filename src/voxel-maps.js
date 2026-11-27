@@ -85,7 +85,7 @@ const GuildVoxelMaps = (() => {
     sunny:{field:[[764,587],[854,576]],house:[[738,599],[881,571]]}
   };
   function legacyCenter(plot,appearance,i) {
-    const kind = buildingKind(appearance);
+    const kind = buildingKind(buildingAppearance(appearance));
     const centers = legacyCenters[plot.id];
     if (centers) return (kind === "farm" ? centers.field : centers.house)[i];
 
@@ -236,8 +236,10 @@ const GuildVoxelMaps = (() => {
     ctx.restore();
   }
 
+  const buildingAppearance = kind => Guild.commercialBuildings[kind]?.appearance || kind;
   const buildingKind = appearance => appearance.startsWith("shop_") ? "shop" : appearance;
-  function buildingProps(plot,appearance,pad,perspectiveY) {
+  function buildingProps(plot,building,pad,perspectiveY) {
+    const appearance = buildingAppearance(building);
     const kind = buildingKind(appearance), {radius,center} = pad;
     if (kind === "farm") {
       const scale = 2*radius/(plot.size*Math.SQRT2*footprints.farm);

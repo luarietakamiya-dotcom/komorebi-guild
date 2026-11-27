@@ -19,8 +19,8 @@ const GuildScenery = (() => {
   }
 
   function town(people, url, time, reduced, routes, camera) {
-    return people.map(({ id, sprite, scale = 1 }, i) => {
-      const {points, distances, seconds} = routes[id] || routes[sprite] || routes.custom;
+    return people.map(({ id, sprite, route, scale = 1 }, i) => {
+      const {points, distances, seconds} = routes[route || id] || routes[sprite] || routes.custom;
       const cycle = (time / seconds + i * .32) % 2;
       const leg = cycle % 1;
       const travel = limit(leg / .78);

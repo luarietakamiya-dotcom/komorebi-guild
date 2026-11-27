@@ -418,6 +418,18 @@ const Guild = (() => {
     wall:   { name: "バリケード", group: "防衛", cost: 900, defense:4 },
     farm:   { name: "畑", group: "畑", cost: 8, perTile: true, food:1 }
   };
+  const commercialBuildings = {
+    florist:   {name:"花屋", cost:160, appearance:"shop_alchemy", townSatisfaction:1, attraction:2},
+    cafe:      {name:"喫茶店", cost:220, appearance:"tavern", townSatisfaction:2, recovery:6},
+    boutique:  {name:"洋服屋", cost:280, appearance:"shop_armor", boutiques:1},
+    souvenir:  {name:"土産物屋", cost:320, appearance:"shop", attraction:1, souvenirSpend:6},
+    guide:     {name:"観光案内所", cost:450, appearance:"school", attraction:10},
+    market:    {name:"市場", cost:550, appearance:"shop", marketStalls:1},
+    spaInn:    {name:"温泉宿", cost:780, appearance:"inn", attraction:15, recovery:8},
+    theater:   {name:"劇場", cost:960, appearance:"shop_magic", theaters:1, townSatisfaction:3}
+  };
+  for (const facility of Object.values(commercialBuildings)) facility.group = "商業施設";
+  const buildingCatalog = {...buildings,...commercialBuildings};
   // Each workshop owns its specialty and progress. Buildings keep their original
   // save keys, prices and weekly yields, including older general stores and taverns.
   const shopTypes = {
@@ -696,7 +708,8 @@ const Guild = (() => {
     for (const [key, value] of Object.entries(finish?.effects || {})) effects[key] = (effects[key] || 0) + value;
     const quality = shop.level + craftBonus(shop) + craftSupport(s) + (finish?.parent ? 2 : finish ? 1 : 0);
     const fee = 2 * recipe.cost;
-    const materials = recipe.cost * (items[type.material]?.price || 5);
+    const discount = Math.min(4,facilityTotals(s.town).marketStalls);
+    const materials = recipe.cost * ((items[type.material]?.price || 5) - discount);
     const price = fee + Math.ceil(materials * (s.town.landmark === "exchange" ? .75 : 1));
     const order = {name:recipe.name + (finish ? "・" + finish.finish : ""), effects, cost:recipe.cost, level:shop.level, quality, fee, price};
     if (!type.slot) {
@@ -809,11 +822,11 @@ const Guild = (() => {
   }
   function build(s, site, kind, specialty = defaultSpecialty[kind]) {
     const plot = plotForSite(site);
-    check(plot && Object.hasOwn(buildings, kind), "区画と建物を選んでください。");
-    check(!plot.defenseOnly || buildings[kind].defense,"ここには防衛施設を建築できます。");
-    if (buildings[kind].defense) check(!s.raids.active,"防衛施設の建築は平時に行います。");
+    check(plot && Object.hasOwn(buildingCatalog, kind), "区画と建物を選んでください。");
+    check(!plot.defenseOnly || buildingCatalog[kind].defense,"ここには防衛施設を建築できます。");
+    if (buildingCatalog[kind].defense) check(!s.raids.active,"防衛施設の建築は平時に行います。");
     check(site === plot.sites.slice(0,plotCapacity(plot,s.town.plots)).find(id => !s.town.plots[id]), "この建築枠は選べません。");
-    const price = townPrice(plot, buildings[kind]);
+    const price = townPrice(plot, buildingCatalog[kind]);
     check(guildGold(s) >= price, "建築資金が足りません。");
     if (specialty !== undefined) {
       check(Object.hasOwn(shopTypes, specialty) && shopTypes[specialty].building === kind, "建物に合う専門店を選んでください。");
@@ -821,7 +834,7 @@ const Guild = (() => {
     }
     s.gold -= price;
     s.town.plots[site] = kind;
-    if (buildings[kind].defense) s.town.defenses[site] = newDefense(kind);
+    if (buildingCatalog[kind].defense) s.town.defenses[site] = newDefense(kind);
     if (plot.road) s.town.outerTerritory = true;
   }
   const hasInn = s => Object.entries(s.town.plots).some(([id,kind]) => kind==="inn" && !s.town.repairs?.[id]);
@@ -834,10 +847,16 @@ const Guild = (() => {
     morale:n => `町にいる冒険者の士気 ＋${n} / 週`,
     recovery:n => `休息・休暇で最大HP・MPの${n}％を追加回復`,
     satisfaction:n => `町で食事をすると満足度 ＋${n} / 週`,
-    experience:n => `遠征から帰った冒険者の経験値 ＋${n}`
+    experience:n => `遠征から帰った冒険者の経験値 ＋${n}`,
+    attraction:n => `観光客 ＋${n}人 / 週（町の発展でさらに増加）`,
+    souvenirSpend:n => `観光客1人の土産代 ＋${n} G（売上の2割が税収）`,
+    marketStalls:n => `市場税 ＋${3*n} G / 週。工房の素材購入費が1個につき${n} G引き（最大4 G引き）`,
+    townSatisfaction:n => `住人の満足度 ＋${n} / 週`,
+    boutiques:n => `町にいる女性の士気 ＋${7*n}、利用者がいれば町の満足度 ＋${n} / 週`,
+    theaters:n => `町にいる住人の士気 ＋${9*n} / 週。シイナ・メニーヤが出演すると各人につき士気 ＋${4*n}・満足度 ＋${n}`
   };
   function facilityEffects(kind, plot, shop) {
-    const building = buildings[kind];
+    const building = buildingCatalog[kind];
     const effects = {};
     for (const key of Object.keys(facilityEffectText)) {
       if (building[key]) effects[key] = building[key] * (building.perTile ? plot.size ** 2 : 1);
@@ -851,7 +870,7 @@ const Guild = (() => {
     const total = Object.fromEntries(Object.keys(facilityEffectText).map(key => [key,0]));
     for (const [site,kind] of Object.entries(town.plots)) {
       const plot = plotForSite(site);
-      if (!plot || !Object.hasOwn(buildings,kind) || town.repairs?.[site]) continue;
+      if (!plot || !Object.hasOwn(buildingCatalog,kind) || town.repairs?.[site]) continue;
       const effects = facilityEffects(kind,plot,town.workshops?.[site]);
       for (const [key,n] of Object.entries(effects)) total[key] += n * (key === "defense" ? town.defenses?.[site]?.level || 1 : 1);
     }
@@ -862,6 +881,18 @@ const Guild = (() => {
     }
     total.defense += town.ward || 0;
     return total;
+  }
+  function tourismReport(s, yields = facilityTotals(s.town)) {
+    const size = Object.keys(s.town.plots).filter(site =>
+      !plotForSite(site)?.defenseOnly && !s.town.repairs[site]).length;
+    const visitors = yields.attraction ? yields.attraction + Math.floor(size / 3)
+      + Math.floor(fame(s) / 10) + 3 * s.guildProgress.grade : 0;
+    const visitorTax = visitors * 2; // 10 G spent in town per visitor, taxed at 20%.
+    const souvenirSales = visitors * yields.souvenirSpend;
+    const souvenirTax = Math.floor(souvenirSales / 5);
+    const marketTax = 3 * yields.marketStalls;
+    return {week:s.week, visitors, visitorTax, souvenirSales, souvenirTax, marketTax,
+      total:visitorTax + souvenirTax + marketTax};
   }
   function townTotals(town) {
     const {defense, food, income, ore, strength} = facilityTotals(town);
@@ -1438,7 +1469,7 @@ const Guild = (() => {
     const s = {
       clock:{elapsed:0,paused:false,speed:1}, chatterRate:"quiet", alumni:[], morningMail:[], priority:"safe", decisionWeek:0, leaveWeek:0,
       guildProfile: profileFor(0), partyProfile: profileFor(1), allowStatReset:true,
-      extraParties: [], selectedParty: 1, town: { plots: {}, food: 0, landmark:null }, week: 1, phase: "prep", gold: 240, roster: [
+      extraParties: [], selectedParty: 1, town: { plots: {}, food: 0, landmark:null, taxHistory:[] }, week: 1, phase: "prep", gold: 240, roster: [
         makePerson("mina", "ミナ", "sword", "bold", "あたし", "casual"),
         makePerson("gald", "ガルド", "guard", "kind", "俺", "normal", "マスター", "だな"),
         makePerson("popo", "ポポ", "healer", "shy", "ぼく", "polite", "マスターさん", "ですぅ…")
@@ -1634,6 +1665,7 @@ const Guild = (() => {
       setCharacterNames(p, p);
     }
     s.town ??= {plots:{},food:0};
+    s.town.taxHistory ??= [];
     if (!Object.hasOwn(landmarks,s.town.landmark)) s.town.landmark = null;
     restoreGuildRegister(s);
     check(Array.isArray(s.extraParties) && parties(s).length <= maxParties && parties(s).every(team =>
@@ -2923,7 +2955,7 @@ const Guild = (() => {
     return {...spec,level,hp,option,maxHP:spec.hp+8*(level-1),
       range:spec.range+20*(level-1)+(option==="range" ? 60 : 0)+(s.town.landmark==="observatory" ? 40 : 0),
       power:spec.power && spec.power+4*(level-1), interval:spec.interval-Number(option==="rapid"),
-      delay:1+level,upgradeCost:level<5 ? buildings[kind].cost*(level+1) : 0};
+      delay:1+level,upgradeCost:level<5 ? buildingCatalog[kind].cost*(level+1) : 0};
   }
   function improveDefense(s,site,option) {
     const kind = s.town.plots[site], spec = defenseTypes[kind];
@@ -3119,7 +3151,7 @@ const Guild = (() => {
       if (s.town.repairs[site]) continue;
       const kind = s.town.plots[site], spec = defenseStats(s,site);
       const center = defenseCenter(site,s.town.plots), place = plotForSite(site);
-      const record = contribution(r,site,buildings[kind].name,place.name);
+      const record = contribution(r,site,buildingCatalog[kind].name,place.name);
       const nearby = invaders.filter(e=>e.hp && distanceOnMap(center,road[e.step])<=spec.range);
       if (!nearby.length) continue;
       const target = nearby[0];
@@ -3283,7 +3315,7 @@ const Guild = (() => {
       r.hits.push({source,target:r.enemies.indexOf(target)});
     };
     for (const [id,kind] of Object.entries(s.town.plots)) {
-      const power = buildings[kind].defense;
+      const power = buildingCatalog[kind].defense;
       if (!power || s.town.repairs[id]) continue;
       const plot = plotForSite(id);
       const post = road.findIndex(stop => stop[2]===plot.id);
@@ -3363,10 +3395,20 @@ const Guild = (() => {
     const yields = facilityTotals(s.town);
     s.town.food += yields.food;
     s.stock.ore += yields.ore;
-    s.gold += yields.income;
+    const taxes = tourismReport(s,yields);
+    s.gold += yields.income + taxes.total;
+    if (taxes.total || s.town.taxHistory.length) s.town.taxHistory.unshift(taxes);
     s.metrics[0] = Math.min(100, s.metrics[0] + yields.strength);
     const residents = s.roster.filter(p => !awayMember(s,p.id));
     const concert = workingInTown(s,"shiina");
+    const townspeople = [...residents,...s.children,...s.alumni.filter(p => p.departure.kind === "retired")];
+    const performances = yields.theaters * (Number(concert) + Number(workingInTown(s,"meniya")));
+    for (const p of townspeople) {
+      const fashion = p.sex === "female" ? 7 * yields.boutiques : 0;
+      p.morale = boundedScore(p.morale + fashion + 9 * yields.theaters + 4 * performances);
+    }
+    const fashionMood = townspeople.some(p => p.sex === "female") ? yields.boutiques : 0;
+    const townMood = townspeople.length ? yields.townSatisfaction + fashionMood + performances : 0;
     const meal = workingInTown(s,"goto") && (hasInn(s) || hasWorkingShop(s,"kitchen"));
     if (yields.morale) {
       const patrons = [...residents,...s.alumni.filter(p => p.departure.kind === "retired")];
@@ -3400,9 +3442,10 @@ const Guild = (() => {
         p.injury = null;
       }
     }
-    if (residents.length) {
+    if (residents.length || townMood) {
       const mood = residents.reduce((sum,p) => sum + moraleBand(p),0);
-      s.metrics[3] = boundedScore(s.metrics[3] + Math.sign(mood) + yields.satisfaction + (concert ? 2 : 0) + (meal ? 2 : 0));
+      s.metrics[3] = boundedScore(s.metrics[3] + Math.sign(mood) + townMood
+        + (residents.length ? yields.satisfaction + (concert ? 2 : 0) + (meal ? 2 : 0) : 0));
     }
     settleGuestMissions(s);
     s.week++;
@@ -3434,7 +3477,7 @@ const Guild = (() => {
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
-    orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, plotForSite, buildings, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
+    orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, plotForSite, buildings, buildingCatalog, commercialBuildings, tourismReport, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
     payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, hire, register, estimate, depart, step, choices, reply,
     returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile, maxTributeRate,
     nextDay:nextWeek, dayStarted:weekStarted, dayMillis:weekMillis };

@@ -557,7 +557,7 @@ function shopSite(id) {
 }
 function buildingName(site) {
   const shop = state.town.workshops[site];
-  return shop ? g.shopTypes[shop.type].name : g.buildings[state.town.plots[site]].name;
+  return shop ? g.shopTypes[shop.type].name : g.buildingCatalog[state.town.plots[site]].name;
 }
 const materialName = type => g.items[type.material]?.name || "畑の食料";
 const effectText = effects => Object.entries(effects).map(([key,value]) => g.effectNames[key] + signed(value)).join(" ／ ");
@@ -666,8 +666,13 @@ function openShop(id) {
   shopView = "orders";
   navigate("shops", {keepShop:true});
 }
+function tourismDetails(r) {
+  return `観光客 ${r.visitors}人 ・ 町内消費税 ${r.visitorTax} G（1人2 G）・ 土産物税 ${r.souvenirTax} G（売上 ${r.souvenirSales} Gの2割、端数切り捨て）・ 市場税 ${r.marketTax} G`;
+}
 function journalPage() {
   return pageTitle("GUILD JOURNAL","帰還記録","遠征の判断と、仲間が持ち帰った成果の記録。")+
+    (state.town.taxHistory.length ? `<details class="panel archive"><summary>週ごとの観光・税収</summary><ul>${state.town.taxHistory.map(r =>
+      `<li><b>第${r.week}週　ギルド金庫 ＋${r.total} G</b><br>${tourismDetails(r)}</li>`).join("")}</ul></details>` : "") +
     state.raids.reports.map(r => `<details class="panel archive"><summary>第${r.week}週の町の防衛</summary><p>${raidReport(r)}</p></details>`).join("") +
     state.milestones.map(e => `<p class="panel padded">第${e.week}週　${esc(e.message)}</p>`).join("") +
     state.alumni.slice().reverse().map(p => `<details class="panel archive"><summary>第${p.departure.week}週　${esc(p.departure.message)}</summary>
@@ -683,7 +688,17 @@ function townPeople() {
       role:g.childStage(p)+" ・ "+p.age+"歳",scale:.5+.5*Math.min(1,p.age/g.species[p.species].adult)})),
     { id: "toto", voice:{trait:"kind",pronoun:"おいら",tone:"casual"}, sprite: "toto", name: g.artisanName(state.town.workshops.hall), role: "鍛冶屋 ・ "+g.shopRanks[state.town.workshops.hall.level-1] }];
 }
+const touristRoutes = [
+  ["hunter_female_brown","gald"], ["mage_male_gold","mina"], ["thief_female_gold","popo"],
+  ["healer_male_brown","custom"], ["mage_female_brown","shion"], ["hunter_male_gold","toto"]
+];
+function touristWalkers(visitors) {
+  return touristRoutes.slice(0,Math.ceil(visitors / 4)).map(([sprite,route],i) => ({
+    id:"tourist-"+i, sprite, route, name:"観光客", voice:{trait:"careful",pronoun:"私",tone:"polite"}
+  }));
+}
 function selectTownPerson(id) {
+  if (id.startsWith("tourist-")) return toast("観光客が町を散策しています。"+tourismDetails(g.tourismReport(state)));
   if (id === "toto") return openShop("hall");
   if (g.visitorList(state).some(p=>p.id===id)) {
     guestId = id;
@@ -840,7 +855,7 @@ function rangeDiagram(site,kind) {
     }
   }
   const splash = spec.splash && nearestDistance<=radius ? '<ellipse cx="'+nearestStop[0]+'" cy="'+nearestStop[1]+'" rx="'+spec.splash+'" ry="'+spec.splash/2+'" fill="#8574ba35" stroke="#8166a3" stroke-dasharray="4 3"/>' : "";
-  return '<svg class="range-diagram" role="img" aria-label="'+g.buildings[kind].name+'の射程と周辺街道" viewBox="'+[x-width/2,y-height/2,width,height].join(" ")+'"><g fill="none" stroke="#a48a65" stroke-width="4">'+paths.join("")+'</g><ellipse cx="'+x+'" cy="'+y+'" rx="'+radius+'" ry="'+radius/2+'" fill="#578b6926" stroke="#387157" stroke-width="2"/>'+splash+'<g fill="#a5722d">'+terrain.join("")+'</g><circle cx="'+x+'" cy="'+y+'" r="5" fill="#28573d"/></svg>'+
+  return '<svg class="range-diagram" role="img" aria-label="'+g.buildingCatalog[kind].name+'の射程と周辺街道" viewBox="'+[x-width/2,y-height/2,width,height].join(" ")+'"><g fill="none" stroke="#a48a65" stroke-width="4">'+paths.join("")+'</g><ellipse cx="'+x+'" cy="'+y+'" rx="'+radius+'" ry="'+radius/2+'" fill="#578b6926" stroke="#387157" stroke-width="2"/>'+splash+'<g fill="#a5722d">'+terrain.join("")+'</g><circle cx="'+x+'" cy="'+y+'" r="5" fill="#28573d"/></svg>'+
     '<small>緑の楕円は射程、茶線は街道、金の点は橋・隘路。要点では威力＋2または足止め＋1拍。'+(splash ? "紫の楕円は街道に着弾した場合の攻撃範囲。" : "")+'</small>';
 }
 function defensePreview(site,kind) {
@@ -891,7 +906,7 @@ function townRaidScene() {
   return {raid,defenders:g.raidDefenders(state),fraction:Math.min(1,(raid.elapsed+extra)/g.raidBeat)};
 }
 
-function townView(people) {
+function townView(people,taxes) {
   const totals = g.townTotals(state.town);
   const omen = state.town.landmark === "observatory" ? `<p class="raid-bulletin"><b>今週の星読み ・ ${g.luckyWeek(state.week) ? "吉" : "凶"}</b>　${g.luckyWeek(state.week) ? "深層の罠は静かです。宝箱では星図の導きで鉱石をもう1個拾えます。" : "深層の罠が活発です。星図を携えた隊は罠を感知できます。"}</p>` : "";
   return raidBulletin() + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
@@ -902,7 +917,9 @@ function townView(people) {
       <div><dt>${icon("shield",16)} 防衛値</dt><dd>${totals.defense}</dd></div>
       <div><dt>${icon("sprout",16)} 食料ストック</dt><dd>${state.town.food}<small>（＋${totals.food} / 週）</small></dd></div>
       <div><dt>${icon("coin",16)} 施設収入</dt><dd>${totals.income}<small> G / 週</small></dd></div>
-    </dl>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
+      <div><dt>${icon("map",16)} 今週の観光客</dt><dd>${taxes.visitors}<small> 人</small></dd></div>
+    </dl><details class="rules"><summary>今週の税収見込み　${taxes.total} G</summary>
+      <p>${tourismDetails(taxes)}</p><p>週末にギルド金庫へ入金します。観光客は観光施設・名声・ギルドランク・町の建築数に応じて増えます。</p></details>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
     <ul>${people.map(p => `<li>${(p.voice.hair || p.voice.portrait) ? portrait(p.voice,"resident-portrait") : asset(g.uniqueGuests[p.id] ? p.sprite : "px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
 }
 
@@ -916,7 +933,8 @@ function sceneChatterRate(kind) {
 let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
   const people = townPeople();
-  const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.characterArt(p).stack,name:g.familiarName(p),voice:p})));
+  const taxes = g.tourismReport(state);
+  const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.characterArt(p).stack,name:g.familiarName(p),voice:p})),touristWalkers(taxes.visitors));
   const repairs = Object.entries(state.town.repairs).map(([id,job])=>[id,job.remaining>0]);
   const built = GuildVoxelMaps.townAppearances(state.town);
   const layout = JSON.stringify([built,state.town.landmark,repairs,walkers.map(p=>[p.id,p.sprite,p.name,p.scale])]);
@@ -936,7 +954,7 @@ function render() {
   const drawer = (drawerId === "hall" ? guildCharter() + metricsPanel() + facilityList() + partyBoard(true) : "") +
     ({hall,roster,shops,mail:mailbox,history:journalPage}[drawerId])() + (drawerId === "hall" ? visitorBoard() : "");
   $("#screen").innerHTML = (saveWarning?`<p role="status" class="warning">${esc(saveWarning)}</p>`:"")+
-    townView(people)+`<section id="management" aria-label="${label}" ${page==="town"?"hidden":""}>
+    townView(people,taxes)+`<section id="management" aria-label="${label}" ${page==="town"?"hidden":""}>
     <div class="drawer-bar">${icon(symbol,19)}<b>${label}</b>
     ${action("close-drawer",icon("close",18),"icon-btn",'aria-label="引き出しを閉じて元の画面に戻る"')}</div>
     <div class="drawer-body">${drawer}</div></section>`;
@@ -1253,7 +1271,7 @@ async function readEmblem(input) {
     }
   }
 }
-let selectedPlot;
+let selectedPlot, commercialCatalog = false;
 function activePlot() {
   if (modal === "plot") return selectedPlot;
   const button = document.activeElement;
@@ -1261,6 +1279,7 @@ function activePlot() {
     return button.dataset.id === "hill" ? GuildVoxelMaps.hillPlot : g.allPlots.find(plot => plot.id === button.dataset.id);
 }
 function selectPlot(id) {
+  commercialCatalog = false;
   selectedPlot = id === "hill" ? GuildVoxelMaps.hillPlot : g.allPlots.find(plot => plot.id === id);
   if (selectedPlot && (!selectedPlot.road || townCamera)) {
     if (state.town.workshops[id] && g.plotCapacity(selectedPlot,state.town.plots) === 1) return openShop(id);
@@ -1286,7 +1305,7 @@ function facilityList() {
   for (const [site,kind] of Object.entries(town.plots)) {
     const plot = g.plotForSite(site);
     const shop = town.workshops[site];
-    const name = kind === "tavern" ? "酒場（食べ物屋）" : shop ? g.shopTypes[shop.type].name : g.buildings[kind].name;
+    const name = kind === "tavern" ? "酒場（食べ物屋）" : shop ? g.shopTypes[shop.type].name : g.buildingCatalog[kind].name;
     const status = town.repairs[site] ? " ・ 損傷のため効果休止中" : "";
     rows.push(`<li><b>${shopSite(site)}の${name}${status}</b><br>${buildingEffect(kind,plot,shop,site)}</li>`);
   }
@@ -1327,7 +1346,8 @@ function plotPanel(plot) {
     }).join("");
   if (occupied.length === capacity) return heading;
   const groups = new Map();
-  for (const [id,building] of Object.entries(g.buildings)) {
+  const catalog = commercialCatalog ? g.commercialBuildings : g.buildings;
+  for (const [id,building] of Object.entries(catalog)) {
     if (plot.defenseOnly && !building.defense) continue;
     if (!groups.has(building.group)) groups.set(building.group,[]);
     const price = g.townPrice(plot,building);
@@ -1342,7 +1362,9 @@ function plotPanel(plot) {
   }
   return heading + `<div class="catalog-heading"><h3>${occupied.length ? "2軒目の建築カタログ" : "建築カタログ"}</h3><span>所持金　${money(g.guildGold(state))}</span></div>
     <p class="fine">施設を選ぶと、表示額を支払ってこの区画に建築します。</p>` +
-    '<section class="defense-panel"><label>防衛施設の射程を確認 <select id="preview-kind">'+Object.keys(g.defenseTypes).map(id=>'<option value="'+id+'">'+g.buildings[id].name+'</option>').join("")+'</select></label><div id="defense-preview">'+defensePreview(plot.sites[occupied.length],"watch")+'</div></section>'+
+    (plot.defenseOnly ? "" : `<div class="shop-tabs">${[["basic","生産・生活・防衛"],["commercial","商業施設"]].map(([id,label]) =>
+      action("plot-catalog",label,"btn",`data-id="${id}" aria-pressed="${commercialCatalog === (id === "commercial")}"`)).join("")}</div>`) +
+    (commercialCatalog ? "" : '<section class="defense-panel"><label>防衛施設の射程を確認 <select id="preview-kind">'+Object.keys(g.defenseTypes).map(id=>'<option value="'+id+'">'+g.buildingCatalog[id].name+'</option>').join("")+'</select></label><div id="defense-preview">'+defensePreview(plot.sites[occupied.length],"watch")+'</div></section>')+
     Array.from(groups, ([group,items])=>`<section class="catalog-group"><h4>${group}</h4><div>${items.join("")}</div></section>`).join("");
 }
 function showModal(type) {
@@ -1654,6 +1676,12 @@ document.addEventListener("click",event=>{
         if (modal !== "character") return;
         g.treatDebuff(state,characterId,id,cmd==="fit-limb");
         break;
+      case "plot-catalog":
+        if (modal !== "plot" || selectedPlot.defenseOnly) return;
+        commercialCatalog = id === "commercial";
+        drawModal();
+        $(`[data-action="plot-catalog"][data-id="${id}"]`).focus();
+        return;
       case "build": case "build-addition": {
         if (modal !== "plot" || !$("#dialog").open) return;
         const site = selectedPlot.sites[cmd === "build" ? 0 : 1];

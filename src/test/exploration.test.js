@@ -1461,3 +1461,23 @@ test("聖女から聖人へ外見を編集し、人物手帳・町・遠征で�
   resumed.click("depart");
   assert.equal(resumed.expeditionSprite("custom"),"saint_male_brown");
 });
+
+test("商業カタログで二軒建てし、観光の見込みと確定した税の内訳を読み分けられる", () => {
+  const s = Guild.initial();
+  s.gold = 2000;
+  const game = openGame(JSON.stringify(s));
+  for (const [build,kind] of [["build","guide"],["build-addition","souvenir"]]) {
+    game.click("plot","brook");
+    game.click("plot-catalog","commercial");
+    assert.match(game.html("#dialog-body"),/洋服屋/);
+    assert.doesNotMatch(game.html("#dialog-body"),/商店の専門/);
+    game.click(build,kind);
+  }
+  assert.match(game.html("#screen"),/今週の税収見込み　35 G/);
+  game.click("work");
+  game.click("do-work");
+  const restored = game.reload();
+  restored.click("nav","history");
+  assert.match(restored.html("#screen"),/第1週　ギルド金庫 ＋35 G/);
+  assert.match(restored.html("#screen"),/観光客 11人 ・ 町内消費税 22 G（1人2 G）・ 土産物税 13 G/);
+});
