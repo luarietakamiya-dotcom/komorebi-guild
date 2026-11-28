@@ -1530,3 +1530,53 @@ test("出発準備で行き先・方針を切り替えると階層別の出現�
   assert.match(form,/双月角の番獣<\/strong>（5階）/);
   assert.doesNotMatch(form,/晶角イノシシ/);
 });
+
+test("未発見の名前は準備画面に出ず、踏破後に帰還報告・伝書箱・翌週の行き先へ反映される", () => {
+  let game = openGame();
+  game.click("prepare");
+  for (const [id,d] of Object.entries(Guild.dungeons))
+    assert.equal(game.html("#dialog-body").includes(d.name),id === "moss",id);
+  game.click("depart");
+  for (let i=0; i<4; i++) game.tick();
+  assert.match(game.html("#screen"),/新天地の発見報告.*銀泉の地下水路.*森の洞を踏破/s);
+  game = game.reload();
+  game.click("nav","mail");
+  const letter = game.state().discoveries.canal.message;
+  assert.equal(game.html("#screen").split(letter).length-1,1);
+  game.click("nav","hall");
+  game.click("next");
+  game.click("prepare");
+  assert.ok(game.html("#dialog-body").includes("銀泉の地下水路"));
+  assert.ok(!game.html("#dialog-body").includes("星灯りの大書庫"));
+});
+
+test("来訪者の持ち込んだ発見の伝書を名簿の「訪問のうわさ」からも読み返せる", () => {
+  const s = Guild.initial();
+  s.metrics[0] = 18;
+  Guild.nextWeek(s,true);
+  const message = s.discoveries.mine.message;
+  const game = openGame(JSON.stringify(s));
+  assert.ok(game.html("#screen").includes(message));
+  game.click("nav","roster");
+  assert.ok(game.html("#screen").includes("訪問のうわさ</summary><p>第2週　"+message));
+  game.click("nav","mail");
+  assert.ok(game.html("#screen").includes(message));
+});
+
+test("別隊の偵察報告が到着した時点で、開いている出発準備に沢が加わる", () => {
+  const s = Guild.initial();
+  s.gold = 1000;
+  Guild.hire(s);
+  Guild.unlockParty(s);
+  const scouts = s.extraParties[0];
+  Guild.configure(s,["shion"],"shion","safe",0,scouts);
+  Guild.depart(s,scouts);
+  const game = openGame(JSON.stringify(s));
+  game.click("prepare");
+  assert.ok(!game.html("#dialog-body").includes(Guild.dungeons.hollow.name));
+  game.tick(); game.tick();
+  assert.match(game.html("#dialog-body"),/<option value="hollow"/);
+  game.click("close");
+  game.click("nav","mail");
+  assert.match(game.html("#screen"),/シオンが偵察中に獣の足跡/);
+});

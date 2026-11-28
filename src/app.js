@@ -174,6 +174,12 @@ function specialVisitLetters(thisWeekOnly) {
   return `<section class="special-visits"><h3>${icon("mail",17)} 特別な来訪</h3>
     ${letters.map(n => `<p><b>第${n.week}週 ・ ${esc(n.sender)}</b><br>${esc(n.message)}</p>`).join("")}</section>`;
 }
+function discoveryLetters(thisWeekOnly) {
+  const letters = Object.values(state.discoveries).filter(n => n && (!thisWeekOnly || n.week === state.week)).reverse();
+  if (!letters.length) return "";
+  return `<section class="special-visits"><h3>${icon("compass",17)} 新天地の発見報告</h3>
+    ${letters.map(n => `<p><small>第${n.week}週</small>　${esc(n.message)}</p>`).join("")}</section>`;
+}
 function morningLetters(thisWeekOnly) {
   const plans = g.morningPlans(state);
   const notices = state.morningMail.filter(n => !n.specialVisit && (!thisWeekOnly || n.week === state.week));
@@ -220,7 +226,7 @@ function mailbox() {
     ${promotions.map(e => `<p><small>第${e.week}週</small>　${esc(e.message)}</p>`).join("")}</section>` : "";
   return pageTitle("GUILD MAIL","伝書箱","隊から届いた相談に返信できます。") +
     (pending.join("") || '<p class="fine">返信を待っている隊はありません。</p>') +
-    teams().map(rescueNotice).join("") + guildMail + raidBulletin() + specialVisitLetters(false) + morningLetters(false) +
+    teams().map(rescueNotice).join("") + discoveryLetters(false) + guildMail + raidBulletin() + specialVisitLetters(false) + morningLetters(false) +
     (pending.length ? waitUntilNextWeek() : "") +
     (archive.length ? `<details class="rules"><summary>${archiveTitle}（${archive.length}件）</summary><ul>${archive.join("")}</ul></details>` : "");
 }
@@ -339,7 +345,7 @@ function visitorBoard() {
     <p class="fine">複数のギルドで仕事をする冒険者です。週の前半はホールで会えます。専属契約を結ぶと所属冒険者として編成できます。週後半は一般冒険者向けの継続依頼に出発します。</p>
     <div class="guest-list">${ordered.map(p=>action("guest",portrait(p)+`<span><b>${g.uniqueGuests[p.id] ? "特別な来訪 ・ " : ""}${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
       <small>${p.mission ? g.dungeons[p.mission.dungeon].name+"で「"+g.quests[p.mission.quest].name+"」を受注中" : "ホールに滞在中"}</small></span>`,"btn",`data-id="${p.id}"`)).join("") || "今週の来訪者はいません。"}</div>
-    <details><summary>訪問のうわさ</summary>${state.registry.filter(p=>g.uniqueGuests[p.id]).map(p=>`<p>${g.jobName(p.job,p.sex)}${esc(p.name)}（${ageLabel(p)}）　${g.uniqueGuests[p.id].invitation}</p>`).join("")}</details>
+    <details><summary>訪問のうわさ</summary>${Object.values(state.discoveries).filter(n=>n?.rumor).map(n=>`<p>第${n.week}週　${esc(n.message)}</p>`).join("")}${state.registry.filter(p=>g.uniqueGuests[p.id]).map(p=>`<p>${g.jobName(p.job,p.sex)}${esc(p.name)}（${ageLabel(p)}）　${g.uniqueGuests[p.id].invitation}</p>`).join("")}</details>
     ${market.returns.length || market.gold ? `<details><summary>町に届いた分け前</summary>
       ${market.returns.map(r=>`<p>${esc(r.name)}が「${g.quests[r.quest].name}」から帰還。町に${g.items[g.quests[r.quest].item].name}1個と${r.gold}Gを納めました。</p>`).join("")}
       ${action("market",`金庫と倉庫へ（${market.gold}G・薬草${market.herb}・鉱石${market.ore}）`,"btn",market.gold?"":"disabled")}</details>` : ""}</section>`;
@@ -922,7 +928,7 @@ function townRaidScene() {
 function townView(people,taxes) {
   const totals = g.townTotals(state.town);
   const omen = state.town.landmark === "observatory" ? `<p class="raid-bulletin"><b>今週の星読み ・ ${g.luckyWeek(state.week) ? "吉" : "凶"}</b>　${g.luckyWeek(state.week) ? "深層の罠は静かです。宝箱では星図の導きで鉱石をもう1個拾えます。" : "深層の罠が活発です。星図を携えた隊は罠を感知できます。"}</p>` : "";
-  return raidBulletin() + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
+  return raidBulletin() + (page === "town" ? discoveryLetters(true) : "") + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
     <figcaption>${icon("map",17)} 空きのある区画を選んで建築 <span>拡大中はドラッグで移動できます。外周の街道と防衛区画は立体地形で確認できます。</span></figcaption></figure>
     <dl class="town-ledger">
       <div><dt>${icon("home",16)} 通常区画の建築数</dt><dd>${g.territoryPlots.filter(plot=>state.town.plots[plot.id]).length}<small> / ${g.territoryPlots.length} 区画</small></dd></div>
@@ -1066,17 +1072,20 @@ function surfaceEmergency() {
 function advanceExpedition(team) {
   delete team.trip.progress;
   const featCount = state.guildProgress.feats.length;
+  const knownPlaces = Object.keys(state.discoveries).length;
   g.step(state, team);
+  const discovered = Object.keys(state.discoveries).length !== knownPlaces;
+  const watchingTrip = page === "hall" && team === selected();
   const previousWarning = saveWarning;
   surfaceEmergency();
   if (["character","gambits","retirement"].includes(modal) && !g.person(state,characterId)) closeModal();
   save();
   if (team.phase === "report" || team.trip.unit.some(u=>u.id===characterId)) refreshCharacter();
-  if (team.phase === "report" || team.trip.rescue || team.trip.pending || state.guildProgress.feats.length !== featCount || saveWarning !== previousWarning) {
+  if (team.phase === "report" || team.trip.rescue || team.trip.pending || (discovered && !watchingTrip) || state.guildProgress.feats.length !== featCount || saveWarning !== previousWarning) {
     render();
     if (urgent()) focusEmergency();
-    else if (team.phase === "report" && (modal === "prepare" || modal === "plot")) drawModal();
-  } else if (page === "hall" && team === selected()) {
+    else if ((team.phase === "report" || discovered) && (modal === "prepare" || modal === "plot")) drawModal();
+  } else if (watchingTrip) {
     const inventory = $("#party-inventory");
     if (inventory) {
       const open = inventory.open;
@@ -1177,6 +1186,7 @@ function report(r, live) {
     <p class="fine">精算時のギルド金庫 ${r.returnedGold} G${r.returnedWallet === undefined ? "" : ` ／ 隊の残高 ${r.returnedWallet} G（今回の補給費負担 ${r.actual.partyCosts} G）`} ／ 帰還後の売却 ＋${r.sold} G</p>
     ${r.log.filter(e => e.outfit).map(e => `<p><b>装備の支度</b>　${esc(e.message)}</p>`).join("")}
     ${r.log.filter(e => e.relic).map(e => `<p><b>一点物の発見</b>　${esc(e.message)}</p>`).join("")}
+    ${r.log.filter(e => e.discovery).map(e => `<p><b>新天地の発見報告</b>　${esc(e.message)}</p>`).join("")}
     <div class="ledger"><div>${r.actual.equipmentCost === undefined ? "今回の余剰" : "ギルド倉庫へ移した素材"}<b>薬草 ×${r.surplus.herb} ・ 鉱石 ×${r.surplus.ore}</b></div><div>研究に卸した鉱石<b>${r.donated}個</b></div></div></section>
     <section class="panel padded">${title("chart","ギルドの指標")}<div class="report-metrics">${labels.map((name,i)=>`<div><b>${name}</b><span>${r.before[i]} → ${r.after[i]}</span>${tag(signed(r.after[i]-r.before[i]),r.after[i]<r.before[i]?"rose":"mint")}<small>${reasons[i]}</small></div>`).join("")}</div></section></div>
     <div class="split"><section class="panel padded">${title("team","仲間の様子",cap("基礎 EXP ＋"+r.xp))}${r.unit.map(u=>`<div class="return-row">${portrait(who(u.id))}<b>${esc(who(u.id).name)}</b><span>${names[u.state]}${u.state==="lost" ? "" : " ・ EXP ＋"+(u.xp ?? r.xp)} ・ ${u.state==="lost"?"永久消失":u.endOfLife?"帰還後に天寿を全う":u.recoveryWeek?"第"+u.recoveryWeek+"週以降に復帰":u.injury?esc(u.injury.kind)+"・第"+u.injury.readyWeek+"週復帰":u.state==="severe"?"翌週は療養":"翌週出撃可"}${u.moraleChange == null ? "" : " ・ 士気 "+signed(u.moraleChange)}</span></div>`).join("")}
@@ -1453,7 +1463,7 @@ function prepForm() {
     ${dungeonScouting(draft.dungeon,draft.policy)}
     ${state.town.landmark === "academy" ? `<p><b>学院の古地図</b>　最初の分岐の先は${g.surveyDungeon(state,draft.dungeon).join(" ／ ")}。</p>` : ""}
     <div class="form-pair"><label>リーダー<select id="leader">${draft.party.map(id=>`<option value="${id}" ${draft.leader===id?"selected":""}>${esc(who(id).name)}</option>`).join("")}</select></label><label>探索方針<select id="policy">${Object.entries(g.policies).map(([id,name])=>`<option value="${id}" ${draft.policy===id?"selected":""}>${name}</option>`).join("")}</select></label></div>
-    <p class="fine">${draft.policy==="safe"?"安全第一は採集路へ。薬草が主な収穫で、鉱石は1個です。":"素材優先では両路が候補。大胆は近道へ進み、他の性格は判断を仰ぎます。"}</p>
+    <p class="fine">${draft.dungeon !== "moss" ? g.dungeons[draft.dungeon].pattern+" ・ 最深部は第"+g.dungeons[draft.dungeon].floors+"層。" : draft.policy==="safe"?"安全第一は採集路へ。薬草が主な収穫で、鉱石は1個です。":"素材優先では両路が候補。大胆は近道へ進み、他の性格は判断を仰ぎます。"}</p>
     <label class="med-row">${asset("potion")}<span><b>回復薬</b><small>隊 ${selected().bag.supplies.medicine} 本・ギルド ${state.supplies.medicine} 本 ・ 不足分は1本30G</small></span><select id="meds">${[0,1,2,3].map(n=>`<option value="${n}" ${draft.meds===n?"selected":""}>${n} 本</option>`).join("")}</select></label>
     <p class="fine">保存食 ${quote.rations} 食・調合済み回復薬 ${quote.packedMeds} 本を携行。隊の持ち物を優先し、不足分はギルドから補給します。</p>
     <details class="rules"><summary>装備・戦闘の詳細</summary><p>${state.weapon?"木洩れ日の刃："+esc(who(state.wielder)?.name || "未装備")+`（攻撃×${g.bladeMultiplier(state.weaponQuality)}）。工房で付替えできます。`:"武器の基本倍率は1.0。余剰鉱石1個で研究完了、次の準備から80Gで木洩れ日の刃を購入できます。"}</p>${combatNotes()}</details>

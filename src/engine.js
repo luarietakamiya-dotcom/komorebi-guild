@@ -945,14 +945,25 @@ const Guild = (() => {
   for (const n of Object.values(nodes)) n.sheet = 1;
   const dungeons = {
     moss: {name:"苔むす森の洞", level:1, floors:4, pattern:"森の分かれ道", rooms:nodes},
+    hollow: {name:"鈴蘭の隠れ沢", level:1, floors:3, pattern:"沢沿いの採集路と獣道", rooms:{
+      gate:room("沢の降り口","fork",1,9,50,["flowers","den"]),
+      flowers:room("鈴蘭の岸","herb",2,32,20,["spring"]),
+      den:room("獣の水飲み場","fight",2,53,75,["spring"]),
+      spring:room("薬草の湧き水","grove",3,72,35,["home"]),
+      home:room("沢の出口","exit",0,92,50)
+    }},
     canal: {name:"銀泉の地下水路", level:2, floors:5, lanes:3, pattern:"支流と合流", requires:"moss",
       landmarks:["水門", "水草の岸", "崩れた水管", "舟着き場", "沈んだ薬棚"]},
+    mine: {name:"琥珀の廃鉱", level:2, floors:6, lanes:3, pattern:"鉱車道と置き去りの鉱箱",
+      landmarks:["巻き上げ場","苔の坑口","魔物の掘り跡","鉱車の軌道","琥珀の鉱箱"]},
     archive: {name:"星灯りの大書庫", level:3, floors:8, lanes:4, pattern:"交差する回廊", requires:"canal",
-      landmarks:["螺旋階段", "薬師の書架", "番獣の抜け穴", "封印書庫", "星図の小箱"]}
+      landmarks:["螺旋階段", "薬師の書架", "番獣の抜け穴", "封印書庫", "星図の小箱"]},
+    spire: {name:"霜天の観星塔", level:4, floors:9, lanes:4, pattern:"外階段が結ぶ九層の観測所",
+      landmarks:["凍った踊り場","霜花の温室","番獣のねぐら","観測回廊","暦師の道具箱","空中歩廊","風見の間","月晶の保管室"]}
   };
   function makeFloors(d) {
     const rooms = {};
-    const [stairs, garden, danger, gallery, cache] = d.landmarks;
+    const [stairs, garden, danger, gallery, cache, bridge="渡り廊下", index="索引の間", vault="星銀の宝物庫"] = d.landmarks;
     for (let f = 1; f <= d.floors; f++) {
       const id = key => f + "-" + key;
       const entry = f === 1 ? "gate" : id("stairs");
@@ -966,9 +977,9 @@ const Guild = (() => {
       rooms[id("grove")] = room("薬草の群生地", "grove", f, 69, 16, [onward]);
       rooms[id("cache")] = room(cache, "treasure", f, 69, 64, [onward]);
       if (d.lanes === 4) {
-        rooms[id("bridge")] = room("渡り廊下", "shortcut", f, 22, 83, [id("index"), id("cache")]);
-        rooms[id("index")] = room("索引の間", "passage", f, 49, 83, [id("grove"), id("vault")]);
-        rooms[id("vault")] = room("星銀の宝物庫", "treasure", f, 78, 83, [onward]);
+        rooms[id("bridge")] = room(bridge, "shortcut", f, 22, 83, [id("index"), id("cache")]);
+        rooms[id("index")] = room(index, "passage", f, 49, 83, [id("grove"), id("vault")]);
+        rooms[id("vault")] = room(vault, "treasure", f, 78, 83, [onward]);
         rooms[id("gallery")].next.push(id("index"));
         if (f % 2 === 0) rooms[id("bank")].next.push(id("index"));
         if (f % 3 === 0) rooms[id("bridge")].next = [id("vault"), onward];
@@ -978,9 +989,41 @@ const Guild = (() => {
     rooms.home.sheet = d.floors;
     return rooms;
   }
+  dungeons.hollow.rooms.home.sheet = dungeons.hollow.floors;
   for (const d of Object.values(dungeons)) d.rooms ??= makeFloors(d);
-  const dungeonOpen = (s, id) => Object.hasOwn(dungeons, id) && (!dungeons[id].requires ||
-    s.history.some(r => r.dungeon === dungeons[id].requires && r.cleared));
+  function dungeonOpen(s,id) {
+    if (!Object.hasOwn(dungeons,id)) return false;
+    const previous = dungeons[id].requires;
+    return id === "moss" || Object.hasOwn(s.discoveries || {},id) ||
+      !!previous && s.history.some(r => r.dungeon === previous && r.cleared);
+  }
+  function discover(s,id,reason,trip,rumor = false) {
+    if (dungeonOpen(s,id)) return;
+    const message = "新しい場所「"+dungeons[id].name+"」を発見！ "+reason;
+    s.discoveries[id] = {week:s.week,message,rumor};
+    if (trip) log(trip,message,{discovery:id});
+  }
+  function traceDungeon(s,t) {
+    const depth = tripRooms(t)[t.node].depth;
+    if (t.dungeon === "moss" && depth >= 2 && !dungeonOpen(s,"hollow")) {
+      const scout = t.unit.filter(u => u.state === "ok").map(u => person(s,u.id))
+        .find(p => familyJob(p) === "hunter" || jobs[p.job].detect);
+      if (scout) discover(s,"hollow",scout.name+"が偵察中に獣の足跡を追い、沢への小道を見つけました。",t);
+      else if (depth >= 4) discover(s,"hollow","森の洞の水晶の鉱脈で、沢に続く地下の流れを見つけました。",t);
+    }
+    if (t.dungeon === "archive" && depth >= 6)
+      discover(s,"spire","大書庫の第6層で見つけた星図に、雪山の塔へ続く道が描かれていました。",t);
+  }
+  function restoreDiscoveries(s) {
+    if (s.discoveries) return;
+    s.discoveries = {};
+    // An old destination can also be stored on a prepared party or a guest away on a job.
+    const known = [...s.history.map(r => r.dungeon), ...parties(s).flatMap(t => [t.dungeon,t.trip?.dungeon]),
+      ...s.registry.map(p => p.mission?.dungeon)];
+    for (const [id,d] of Object.entries(dungeons)) {
+      if (known.includes(id) || (d.requires && dungeonOpen(s,id))) s.discoveries[id] = null;
+    }
+  }
   const tripRooms = t => dungeons[t.dungeon || "moss"].rooms;
   const nextRoom = t => {
     const routes = tripRooms(t)[t.node].next;
@@ -1219,6 +1262,11 @@ const Guild = (() => {
       const message = "ギルドランク"+grade.name+"に昇格！ 新しい依頼「"+quests[grade.quest].name+"」が届きました。";
       s.milestones.unshift({week:s.week,guildGrade:grade.name,message});
     }
+    discoverByGrade(s);
+  }
+  function discoverByGrade(s) {
+    if (s.guildProgress.grade >= 2)
+      discover(s,"spire","ギルドランクCの証を見た王立天文官が、観星塔への登山図を託してくれました。");
   }
   function recordRaidFeats(s,r) {
     const road = roadNames[r.road];
@@ -1360,6 +1408,9 @@ const Guild = (() => {
       const [p] = pool.splice(Math.floor(Math.random()*pool.length),1);
       s.visitors.push(p.id);
     }
+    const guide = regulars.find(p => s.visitors.includes(p.id) && !previous.has(p.id));
+    if (s.discoveries && guide && fame(s) >= 18)
+      discover(s,"mine","ギルドの評判を聞いて訪れた"+guide.name+"が、琥珀を運んだ古い鉱車道を教えてくれました。",null,true);
     // A guest assigned to guard duty stays until relieved. This is the same visit.
     const guards = s.registry.filter(p => uniqueGuests[p.id] && previous.has(p.id) && duty[p.id]);
     if (guards.length) {
@@ -1489,7 +1540,7 @@ const Guild = (() => {
         makePerson("popo", "ポポ", "healer", "shy", "ぼく", "polite", "マスターさん", "ですぅ…")
       ], party: ["mina", "gald", "popo"], leader: "mina", quest: "herb", dungeon:"moss", policy: "safe", meds: 0,
       stock: { herb: 0, ore: 0 }, research: 0, weapon: false, wielder: null,
-      guildProgress:{grade:0,feats:[]}, unlocked: false, outcomes: [], metrics: [0, 50, 100, 60], trip: null, history: []
+      discoveries:{moss:null}, guildProgress:{grade:0,feats:[]}, unlocked: false, outcomes: [], metrics: [0, 50, 100, 60], trip: null, history: []
     };
     s.children = [];
     s.bonds = {};
@@ -1748,7 +1799,9 @@ const Guild = (() => {
         Object.assign(r, tripResult("moss", oldPath(steps, rocky)));
       }
     }
+    restoreDiscoveries(s);
     restoreGuildProgress(s);
+    discoverByGrade(s);
     expireCalls(s);
     return s;
   }
@@ -2111,8 +2164,11 @@ const Guild = (() => {
     ram:{name:"鉄冠の破城獣", hp:54, atk:42, def:12, spd:7, boss:true, note:"襲撃の大将。接近した防衛施設に鉄冠を叩きつけ、追加で6の損傷を与える。"}
   };
   const dungeonPacks = {
+    hollow:[[],["boar"],[]],
     canal:[["goblin","goblin"],["orc"],["bandit"],["shell"],["warden"]],
-    archive:[["moth"],["bandit","moth"],["orc"],["goblin","goblin"],["shell"],["crystal","moth"],["orc","moth"],["warden"]]
+    mine:[["bandit"],["crystal"],["bandit","bandit"],["shell"],["orc","crystal"],["warden"]],
+    archive:[["moth"],["bandit","moth"],["orc"],["goblin","goblin"],["shell"],["crystal","moth"],["orc","moth"],["warden"]],
+    spire:[["moth","moth"],["shell","moth"],["crystal","crystal"],["bandit","moth"],["orc","shell"],["orc","orc"],["crystal","shell"],["orc","moth","moth"],["warden"]]
   };
   function encounterKinds(dungeon,node,policy) {
     if (dungeon === "moss") return node === "vein" && policy === "bold" ? ["boar","crystal"] : ["boar"];
@@ -2621,6 +2677,8 @@ const Guild = (() => {
     t.path.push(t.node);
     t.steps++;
     for (const u of t.unit) recordDepth(person(s,u.id), t, s.week);
+    traceDungeon(s,t);
+    traceDungeon(s,t);
     const n = tripRooms(t)[t.node];
     const trap = trapAt(t.dungeon,t.node);
     const confiscated = trap && enterTrap(s,team,trap);
@@ -2802,7 +2860,14 @@ const Guild = (() => {
     for (const receipt of receipts) log(t,receipt.message,{outfit:true});
     const walletSurplus = Math.max(0,team.wallet-partyWalletCap);
     team.wallet -= walletSurplus;
-    s.history.unshift({ ...tripResult(t.dungeon, t.path), partyNumber: partyNumber(s, team), week: s.week, quest: t.quest, leader: t.leader, success, delivered, surplus, xp, reason, before,
+    const result = tripResult(t.dungeon,t.path);
+    if (result.cleared) {
+      for (const [id,d] of Object.entries(dungeons)) {
+        if (d.requires === t.dungeon)
+          discover(s,id,dungeons[t.dungeon].name+"を踏破した隊が、出口の道標から次の行き先を突き止めました。",t);
+      }
+    }
+    s.history.unshift({ ...result, partyNumber: partyNumber(s, team), week: s.week, quest: t.quest, leader: t.leader, success, delivered, surplus, xp, reason, before,
       after: [...s.metrics], wins: t.wins, severe, wounded, unit: t.unit.map(u => ({ ...u })), log: [...t.log],
       actual: { reward, tributeRate, tribute, partyReward, share, wages: a.wages, food: a.food, medicine, equipmentCost, net:net-equipmentCost,
         partyCosts:(t.partyPaid || 0)-partyRefund, walletSurplus }, quote: a,
@@ -2889,7 +2954,8 @@ const Guild = (() => {
         continue;
       }
       const destinations = Object.keys(dungeons).filter(id => dungeonOpen(s,id) && partyQualifies(s,team.party,dungeonRank(id)));
-      const dungeon = priority === "depth" ? destinations.at(-1) : destinations.includes(team.dungeon) ? team.dungeon : "moss";
+      const dungeon = priority === "depth" ? destinations.sort((a,b) => dungeons[b].floors-dungeons[a].floors)[0]
+        : destinations.includes(team.dungeon) ? team.dungeon : "moss";
       const ore = materialAvailable(s,"ore"), herb = materialAvailable(s,"herb");
       const shortItem = ore < herb ? "ore" : herb < ore ? "herb" : null;
       const score = id => {
