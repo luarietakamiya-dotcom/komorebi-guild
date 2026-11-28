@@ -177,6 +177,7 @@ main {margin-left:208px;min-height:100vh;outline:0}
 .form-title {display:flex;justify-content:space-between;align-items:center;margin:14px 0 7px;color:var(--ink)}
 .pick-list {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
 .pick {display:flex;align-items:center;gap:5px;position:relative;border:1px solid var(--line);border-radius:7px;padding:8px 5px;cursor:pointer}.pick.picked {background:#eff5e8;border-color:#a7bc9c}.pick .avatar {width:29px;height:33px;border-radius:5px}.pick input {width:13px;height:13px;margin:0;accent-color:#5b825e}.pick b {font-size:12px}.pick small {font-size:9px}
+.pick [data-member-status] {margin-top:3px;font-size:11px;line-height:1.4;color:var(--ink)}
 .form-pair {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}.form-pair label,#creator>label,.padded>label {display:grid;gap:5px;font-size:12px;font-weight:700;color:#53634c}
 select,input:not([type=checkbox]) {border:1px solid #cfcebd;border-radius:6px;padding:8px 9px;background:#fffef9;max-width:100%;min-width:0}
 .med-row {margin-top:12px;padding:9px;border:1px solid var(--line);border-radius:8px}.med-row img {width:33px;height:36px}.med-row select {margin-left:auto}
@@ -576,4 +577,28 @@ body:not(.stack-demo) #screen {margin-top:var(--panel-gap)}
   .top-actions .btn {padding-inline:8px}
   .guild-charter,.form-pair,.catalog-group>div {grid-template-columns:minmax(0,1fr)}
   .guild-charter .btn {justify-self:start}
+}
+
+.tutorial {
+  background:#fcfaf1; color:var(--ink); border:1px solid #9ba984;
+  border-inline-start:4px solid #58734c; border-radius:10px;
+  padding:12px 16px; box-shadow:0 4px 18px #263d3226;
+}
+.tutorial[hidden] {display:none}
+#tutorial {position:fixed; z-index:4; bottom:84px; left:16px; width:min(340px,calc(100% - 32px))}
+#dialog-tutorial {margin:12px}
+.tour-heading {display:flex; flex-wrap:wrap; align-items:baseline; gap:8px}
+.tour-heading small {color:#546447}
+.tutorial p {margin:5px 0 8px; line-height:1.5}
+.tutorial .actions {margin:0; gap:8px}
+.tour-target {outline:3px solid #777332; outline-offset:-3px; scroll-margin-block:72px}
+.starter-goals {display:flex; justify-content:space-between; align-items:start; gap:10px; background:#eef2e6; padding:10px 16px; border-radius:10px}
+.starter-goals h2,.guide-start h3 {margin:0; font-size:1rem}
+.starter-goals ul {display:flex; flex-wrap:wrap; gap:2px 24px; padding-left:1.2em; margin:4px 0}
+.guide-start {padding:12px; border:1px solid var(--line); border-radius:8px}
+.guide-topic {border-bottom:1px solid var(--line); padding:5px 0}
+.guide-topic summary {cursor:pointer; font-weight:600}
+.guide-topic p {margin:4px 0 10px}
+@media (max-width:700px) {
+  #tutorial {position:relative; inset:auto; width:auto; margin:6px 0 0; padding:8px 12px; flex:none}
 }

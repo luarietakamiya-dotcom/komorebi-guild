@@ -5,15 +5,19 @@ const storageKey = "komorebi-guild-v1";
 const params = new URLSearchParams(window.location.search);
 const demo = params.get("view") === "dungeon" && params.get("demo") === "1";
 const stackDemo = params.get("view") === "stack" && params.get("demo") === "1";
-let saveWarning = "", state = Guild.initial();
+let saveWarning = "", state = Guild.initial(), freshGame = !demo && !stackDemo;
 try {
   const saved = !demo && !stackDemo && localStorage.getItem(storageKey);
   if (saved) {
+    freshGame = false;
     state = Guild.restore(JSON.parse(saved));
     const migrated = JSON.stringify(state);
     if (migrated !== saved) localStorage.setItem(storageKey,migrated);
   }
 } catch { saveWarning = "保存を利用できないため、この画面で続けます。"; }
+// Saves from before the handbook opt in from Help. Keep progress with this village.
+const tourSteps = ["町を見渡す","冒険者を確認する","パーティーを編成する","ホールで依頼を選ぶ","隊を送り出す","伝書を読む","帰還と精算を確認する"];
+const handbook = state.handbook ??= {status:freshGame ? "active" : "idle", step:0, party:1, goalsOpen:freshGame, goals:{}};
 let page = demo ? "hall" : "town", modal = "", draft = null, customImage = "", imageBusy = false, imageTicket = 0;
 const panes = { town: ["home","町の風景"], hall: ["scroll","ギルドホール"], roster: ["team","冒険者名簿"], shops: ["hammer","町のショップ"], mail: ["mail","伝書箱"], history: ["book","帰還記録"] };
 const labels = ["実力","信用","生存率","満足度"];
@@ -69,6 +73,7 @@ function acknowledgeNotice(open) {
 }
 function save() {
   if (demo) return;
+  rememberGoals();
   rememberProgress();
   try { localStorage.setItem(storageKey, JSON.stringify(state)); }
   catch { saveWarning = "ブラウザに保存できません。この画面を開いたまま遊んでください。"; }
@@ -115,6 +120,135 @@ function worldPauseButton() {
   return action("world-pause",state.clock.paused ? "全体を再開" : "全体を一時停止","btn",
     `aria-pressed="${state.clock.paused}"`);
 }
+const guideTopics = [
+  ["運営の基本", "週初めの伝書にリーダーの予定が届きます。自分で準備する週は「今週の自動判断を止める」を押し、名簿で体調を確認しましょう。ホールで依頼を選び、出発準備で隊員・行き先・補給を決めます。"],
+  ["探索と戦術オーダー", "隊は自分たちで移動・採集・戦闘を進めます。分岐の相談は伝書箱から翌週までに返信しましょう。名簿の人物詳細で「戦術オーダー」を開き、回復やかばう条件を通常攻撃より上に置くと優先されます。"],
+  ["帰還と精算", "帰還すると自動で納品・精算します。帰還報告の帳簿で報酬、上納、食料や給与を確認できます。余った素材は倉庫に入り、売却や工房への納品に使えます。過去の帳簿は「帰還記録」に残ります。"],
+  ["町づくりと商業", "町の空き区画を選ぶと建築費と効果を確認できます。生産施設は食料や素材を供給し、商業施設は観光や町での休息を支えます。「今週の税収見込み」で週末の入金予定を確かめましょう。"],
+  ["防衛", "町に襲撃予告が届いたら、進入路と守備に就く仲間を確認します。防衛区画では建築前に射程を確認できます。襲撃後は損傷した施設を選んで修理を発注しましょう。"],
+  ["世代と結婚", "共闘や贈り物で好感度が上がります。好感度100の成人同士が町にそろったら、人物手帳で結婚できます。子供の成長と成人後の入団は、名簿の「家系図と町の子供」で確認できます。"],
+  ["ランクと試験", "冒険者の階級は人物手帳の昇級試験で上がり、隊員全員の階級で受けられる依頼が決まります。ギルド全体のランクは別にあり、次の昇格に必要な偉業・人数・評価はホールで確認できます。"],
+  ["デバフと治療", "人物詳細で症状と復帰予定を確認します。療養が必要な仲間には休暇を。大聖堂で治せる症状や、からくり工房の義肢で補える能力は、本人の治療欄に表示されます。"]
+];
+const goalLabels = {quest:"依頼を1件受けて出発する", report:"遠征隊を町に迎える", build:"町に施設を1つ建てる"};
+function rememberGoals() {
+  const goals = handbook.goals;
+  if (state.history.length || teams().some(t => t.phase === "explore")) goals.quest = true;
+  if (state.history.length) goals.report = true;
+  if (state.town.landmark || Object.values(state.town.plots).some(Boolean)) goals.build = true;
+}
+function starterGoals(inHelp = false) {
+  const remaining = Object.entries(goalLabels).filter(([id]) => !handbook.goals[id]);
+  if (!remaining.length) return inHelp ? "<p>最初の目標をすべて達成しました。</p>" : "";
+  const list = '<ul>' + remaining.map(([,label]) => '<li>'+label+'</li>').join("") + '</ul>';
+  if (inHelp) return '<details class="rules"><summary>最初の目標（残り'+remaining.length+'件）</summary>'+list+
+    (state.week <= 4 ? action("toggle-goals",handbook.goalsOpen ? "町の目標を閉じる" : "町にも表示する") : "")+'</details>';
+  return '<section class="starter-goals"><div><h2>最初の目標</h2>'+list+'</div>'+action("toggle-goals","閉じる","text-btn",'aria-label="最初の目標を閉じる"')+'</section>';
+}
+function helpPage() {
+  const resume = ["active","paused"].includes(handbook.status);
+  return modalHead("book","遊び方") + '<section class="guide-start"><h3>初回チュートリアル</h3><div class="actions">'+
+    (resume ? action("tour-resume","「"+tourSteps[handbook.step]+"」から再開","primary") : "")+
+    action("tour-restart",handbook.status === "idle" ? "町から案内を始める" : "最初から案内を見る",resume ? "btn" : "primary")+
+    '</div></section>'+starterGoals(true)+'<h3>項目別ガイド</h3>'+
+    guideTopics.map(([title,copy]) => '<details class="guide-topic"><summary>'+title+'</summary><p>'+copy+'</p></details>').join("")+
+    '<details class="guide-topic"><summary>戦闘の計算と進み方</summary>'+combatNotes()+'</details><h3>表示と時間の設定</h3>'+
+    weekSpeedControl()+chatterControl()+'<p class="fine">進行は自動保存されます。全体を一時停止している間も、返信や編成を確認できます。</p>'+action("close","手帳を閉じる","primary wide");
+}
+const tourTeam = () => teams()[handbook.party - 1] || selected();
+const tourHere = () => handbook.status === "active" && tourTeam() === selected();
+const tourButton = (id,label) => action("tour-go",label,"btn",'data-id="'+id+'"');
+function tourHint() {
+  const team = tourTeam(), step = handbook.step;
+  const nav = id => '#sidebar [data-id="'+id+'"]';
+  const hall = tourButton("hall","隊のホールを開く");
+  if (step === 0 && page !== "town") return [nav("town"),"町の地図に戻ると、空き区画と広場の位置を確認できます。",tourButton("town","町を見渡す")];
+  if (step === 0) return [".village-map","広場を囲むのが町の施設です。空き区画では建築費を確認できます。まずは名簿で、遠征を任せる仲間を見てみましょう。",
+    tourButton("roster",team.phase === "prep" && team.decisionWeek !== state.week ? "今週の自動出発を止めて名簿へ" : "冒険者名簿へ")];
+  if (step === 1 && page !== "roster") return [nav("roster"),"冒険者名簿を開いて、仲間の職業と体調を確認しましょう。",tourButton("roster","冒険者名簿へ")];
+  if (step >= 1 && step <= 4 && (team.phase !== "prep" || team.leaveWeek === state.week)) {
+    if (step === 1 && team.phase !== "prep") return [".roster-card","各カードに職業・HP・MPが載っています。この隊はすでに依頼を受けました。今回は伝書と帰還を見届け、編成は次の出発前に試せます。",tourButton("mail","この隊の伝書へ")];
+    if (team.phase !== "prep") return [nav("mail"),"この隊はすでに出発しました。伝書を読み、帰還後は帳簿を確認しましょう。",tourButton("mail","この隊の伝書へ")];
+    return [nav("hall"),"この隊は今週は休暇です。翌週、出発前に編成できます。",page === "hall" ? "" : hall];
+  }
+  if (step === 1) return [".roster-card","カードで職業・HP・MPを確認します。「人物詳細・育成」では特技も読めます。準備ができたら編成を開きましょう。",tourButton("prepare","パーティーを編成する")];
+  if (step === 2 && modal === "prepare") return [".pick-list","隊員を1〜3人とリーダーを選びます。初めは編成済みの仲間と「安全第一」で進められます。下の「編成を保存」を押しましょう。",tourButton("locate-save","編成を保存の位置へ")];
+  if (step === 2) return [nav("roster"),"出発準備を開き、遠征メンバーを確認して編成を保存しましょう。",tourButton("prepare","編成を開く")];
+  if (step === 3) return page === "hall" && team === selected() ? ['.quest:not(:disabled)',"今週の依頼を1件選びます。薬草の採集依頼は危険度が低めです。必要な素材の数と報酬を比べて、依頼札を押しましょう。",tourButton("locate","依頼札の位置へ")] :
+    [nav("hall"),"ホールの掲示板で、隊に任せる仕事を選びましょう。",hall];
+  if (step === 4) return modal === "prepare" ? ['[data-action="depart"]',"行き先と補給費を確認し、「この編成で出発する」を押すと受注が確定します。",tourButton("locate","出発ボタンの位置へ")] :
+    ['#management [data-action="prepare"]',"選んだ依頼の出発準備を開いて、隊を送り出しましょう。",tourButton("prepare","出発準備へ")];
+  if (step === 5) {
+    if (page !== "mail") return [nav("mail"),"伝書箱には隊の予定や探索中の相談が届きます。隊からの知らせを読んでみましょう。",tourButton("mail","伝書箱を開く")];
+    return [team.trip?.pending ? '.comms [data-party="'+handbook.party+'"]' : ($("#management .morning-mail") ? "#management .morning-mail" : "#management .pane-intro"),"分岐の相談があれば、選択肢から返信できます。リーダーが自分で道を決めることもあります。読み終えたら帰還を見届けましょう。",tourButton("watch","帰還を見届ける")];
+  }
+  const settled = state.history.findLast(r => r.partyNumber === handbook.party && r.week >= handbook.tripWeek);
+  if (!settled && team.trip?.pending && page === "mail") return ['.comms [data-party="'+handbook.party+'"]',"隊からの相談を読み、希望する行動を選んで返信しましょう。",""];
+  if (!settled && team.phase === "explore") return [page === "hall" && selected() === team ? "#trip-progress" : nav("hall"),team.trip.pending ? "隊が返事を待っています。伝書に返信すると探索が進みます。" : "隊が探索を終えると帰還報告が届きます。ホールで荷物を確認し、途中で帰還を指示することもできます。",
+    team.trip.pending ? tourButton("mail","伝書に返信する") : page === "hall" && selected() === team ? "" : hall];
+  const live = team.phase === "report" && (!settled || settled === g.reportFor(state,team));
+  const reportPage = live ? "hall" : "history";
+  if (page !== reportPage || (live && selected() !== team)) return [nav(reportPage),"隊が町に帰りました。帰還報告の帳簿を開きましょう。",tourButton(reportPage,"帰還報告を開く")];
+  const account = !live && settled ? '[data-report="'+settled.partyNumber+'-'+settled.week+'"] .accounts' : ".accounts";
+  const retry = handbook.missedPrep && !g.anyAway(state) && live ? tourButton("next-prep","週を締めて手動編成を試す") : "";
+  return [account,"納品と精算は帰還時に済んでいます。帳簿の「実額」で報酬・給与・合計収支を確認しましょう。過去の帳簿は「帰還記録」で読み返せます。",tourButton("finish","帳簿を確認して案内を終える")+retry];
+}
+let highlighted;
+const tourMarkup = new WeakMap();
+function refreshTutorial() {
+  const inPrep = modal === "prepare" && [2,4].includes(handbook.step) && tourHere();
+  const host = $(inPrep ? "#dialog-tutorial" : "#tutorial");
+  $("#tutorial").hidden = handbook.status !== "active" || !!modal;
+  $("#dialog-tutorial").hidden = !inPrep;
+  highlighted?.classList.remove("tour-target");
+  highlighted = null;
+  if (host.hidden) return;
+  const [selector,copy,controls] = tourHint();
+  highlighted = $(selector);
+  highlighted?.classList.add("tour-target");
+  if (handbook.step === 6 && page === "history") {
+    const archive = highlighted?.closest?.("details");
+    if (archive) archive.open = true;
+  }
+  const html = '<div class="tour-heading"><small>初回案内 '+(handbook.step+1)+' / '+tourSteps.length+'</small><b>'+tourSteps[handbook.step]+'</b></div><p>'+copy+'</p><div class="actions">'+controls+
+    action("tour-pause","中断","text-btn",'aria-label="案内を中断する"')+'</div>';
+  if (tourMarkup.get(host) !== html) {
+    host.innerHTML = html;
+    tourMarkup.set(host,html);
+  }
+}
+function showTourTarget(selector) {
+  (selector ? $(selector) : highlighted)?.scrollIntoView?.({block:"center",inline:"nearest"});
+}
+function tourGo(id) {
+  if (handbook.status !== "active") return;
+  const team = tourTeam();
+  if (id === "locate" || id === "locate-save") return showTourTarget(id === "locate-save" ? '[data-action="keep-party"]' : null);
+  if (id === "finish") {
+    handbook.status = "done";
+    refreshTutorial(); save(); toast("初回案内を終えました。遊び方はいつでも開けます。"); return;
+  }
+  if (id === "next-prep") {
+    g.nextWeek(state);
+    lastWorldTick = performance.now();
+    handbook.step = 0;
+    handbook.missedPrep = false;
+    id = "roster";
+  }
+  if (id === "roster") {
+    if (handbook.step === 0 && g.morningPlans(state).some(p => p.team === team)) g.holdDeparture(state,team);
+    handbook.step = 1;
+  } else if (id === "prepare") {
+    if (team.phase !== "prep" || team.leaveWeek === state.week) return;
+    if (handbook.step === 1) handbook.step = 2;
+    if (selected() !== team) navigate("roster",{party:handbook.party});
+    showModal("prepare"); save(); return;
+  } else if (id === "mail" && handbook.step < 5) { handbook.missedPrep = true; handbook.step = 5; handbook.tripWeek = team.trip.week; }
+  else if (id === "watch") handbook.step = 6;
+  navigate(id === "watch" ? (team.phase === "prep" ? "history" : "hall") : id,{party:handbook.party});
+  save(); showTourTarget();
+}
+
 function topbar() {
   const profile = state.guildProfile;
   document.title = profile.name + " ｜ ギルド運営手帳";
@@ -122,7 +256,7 @@ function topbar() {
     <div class="balances"><div class="status-cell"><small>${icon("sun",15)} 暦</small><b>${1+g.ageYears(g.calendarDate(state))}年目・第${state.week}週</b><span id="world-time">${clockText()}</span></div>
     <div class="status-cell"><small>${icon("coin",15)} ギルド金庫</small><b>${money(g.guildGold(state))}</b></div>
     <div class="status-cell"><small>${icon("flag",15)} ギルドランク</small><b>${g.guildStanding(state).grade}</b></div></div>
-    <div class="top-actions">${worldPauseButton()}${action("help",icon("help",19),"icon-btn",'aria-label="遊び方"')}</div>
+    <div class="top-actions">${worldPauseButton()}${action("help",icon("help",17)+" 遊び方","btn guide-help")}</div>
     ${state.raids.active || state.raids.warning ? action("nav",state.raids.active ? "襲撃中 ・ 町を見守る" : "襲撃予告 ・ 町で確認","raid-link text-btn",'data-id="town"') : ""}`;
 }
 function questCard(id) {
@@ -191,14 +325,14 @@ function partyBoard(inHall) {
     const status = team.leaveWeek === state.week ? "休暇中" : team.phase === "prep" ? "出発前" : team.phase === "report" ? "帰還済み" :
       team.trip.pending?.type === "crisis" ? "緊急通信" : team.trip.pending ? "伝書・返信待ち" :
       team.trip.rescue ? rescueStatus(team.trip) : team.trip.paused ? "一時停止" : "遠征中";
-    return action("party", `<strong>${teamBadge(team)}</strong><span>${status} ・ ${team.wallet} G</span><small>${team.party.map(id => esc(who(id).name)).join("・") || "未編成"}</small>`,
+    return action("party", `<strong>${teamBadge(team)}</strong><span>${status} ・ ${team.wallet} G${team.pendingFormation ? " ・ 編成予約あり" : ""}</span><small>${team.party.map(id => esc(who(id).name)).join("・") || "未編成"}</small>`,
       "team-card", `data-id="${index+1}" aria-pressed="${inHall && team === selected()}"`);
   }).join("");
   const price = g.unlockCost(state);
   const unlock = inHall && teams().length < g.maxParties ? action("unlock-party",
     `第${teams().length+1}隊を開設 ・ ${price} G`, "btn", g.guildGold(state) < price ? "disabled" : "") : "";
   const settings = inHall ? action("party-settings", icon("edit",15)+" 選択中の隊の設定", "btn") : "";
-  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征隊の管理":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
+  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征隊の管理":"今週の出発・帰還"}</h2><div class="actions">${inHall && selected().phase !== "prep" ? action("prepare","次回の編成を変更","btn") : ""}${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
 }
 function morningControls() {
   const team = selected(), resting = team.leaveWeek === state.week;
@@ -236,12 +370,37 @@ function lifeStatus(p) {
     (p.injury ? ` ・ ${esc(p.injury.kind)}（第${p.readyWeek}週復帰）` : "") +
     (p.recovery?.pregnancy ? ` ・ 妊娠療養（第${p.recovery.pregnancy}週復帰）` : "");
 }
+function returnEstimate(team) {
+  const t = team.trip;
+  if (t.rescue) return rescueStatus(t) + " ・ 救出後に帰還";
+  if (t.pending) return "返信待ち ・ 帰還時期は返信後に更新";
+  if (t.paused || state.clock.paused || urgent()) return "一時停止中 ・ 帰還時期は再開後に更新";
+  const rooms = g.tripRooms(t);
+  // Count walking beats to the nearest exit along the currently open routes.
+  let next = [t.node], steps = 0;
+  const visited = new Set();
+  while (next.length && !next.some(id => rooms[id].event === "exit")) {
+    const following = [];
+    for (const id of next) {
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const routes = rooms[id].next;
+      following.push(...(id === t.node && routes.includes(t.route) ? [t.route] : routes));
+    }
+    next = following;
+    steps++;
+  }
+  return "帰還まで最短" + steps + "歩（移動約" + steps*2/stepSpeed(team) + "秒＋戦闘・相談）";
+}
 function assignmentHint(p) {
   const owner = teams().find(team => team.party.includes(p.id));
-  if (owner?.phase === "explore") return " ・ "+teamName(owner)+"が遠征中";
-  if (p.leaveWeek === state.week) return " ・ 今週は休暇";
-  if (!g.available(state,p)) return " ・ 第"+g.fitWeek(p)+"週に復帰";
-  return owner && owner !== selected() ? " ・ "+teamName(owner)+"から移籍" : "";
+  const reserved = g.reservedBy(state,p.id,selected());
+  let status = "在町";
+  if (owner?.phase === "explore") status = teamName(owner) + "・探索中 ・ " + returnEstimate(owner);
+  else if (owner && owner !== selected()) status += " ・ "+teamName(owner)+"から移籍";
+  if (p.leaveWeek === state.week) status += " ・ 今週は休暇";
+  else if (g.fitWeek(p) > state.week) status += " ・ 第"+g.fitWeek(p)+"週から出発可";
+  return reserved ? status + " ・ "+teamName(reserved)+"で予約済み" : status;
 }
 const waitingLetters = () => teams().filter(team => team.phase === "explore" && team.trip.pending);
 const waitUntilNextWeek = () => `<p class="fine">翌週になると、今週受注したすべての依頼が納品期限を過ぎます。</p>` + action("next","返信せず翌週へ","btn");
@@ -346,7 +505,7 @@ function familyPanel() {
     </details>`;
 }
 function roster() {
-  const prep = selected().phase === "prep", candidate = !who("shion");
+  const candidate = !who("shion");
   const card = p=>{
     const visitor = !who(p.id), resting = !g.available(state,p);
     const owner = teams().find(team => team.party.includes(p.id));
@@ -359,10 +518,10 @@ function roster() {
       ${visitor ? "" : `<p class="fine">現在HP ${owner?.phase === "explore" ? unit.hp : g.currentHP(state,p)}/${g.outfittedStat(state,p,"hp")} ・ MP ${unit?.mp ?? g.currentMP(p)}/${g.maxMP(p)}<br>${moraleText(p)} ・ ${lifeStatus(p)}</p>`}
       ${p.backstory ? `<p class="backstory-excerpt">${esc(p.backstory)}</p>` : ""}
       ${visitor ? "" : action("character","人物詳細・育成","primary wide",`data-id="${p.id}" aria-label="${esc(p.name)}の人物詳細・育成"`)}
-      ${visitor?action("hire",g.hireCost(p)+" G で雇う","btn wide",g.weekStarted(state)||g.guildGold(state)<g.hireCost(p)?"disabled":""):prep&&!resting&&!g.awayMember(state,p.id)?action("prepare",icon("team",16)+" 編成する","btn wide"):""}</article>`;
+      ${visitor?action("hire",g.hireCost(p)+" G で雇う","btn wide",g.weekStarted(state)||g.guildGold(state)<g.hireCost(p)?"disabled":""):action("prepare",icon("team",16)+" 編成する","btn wide")}</article>`;
   };
   return '<p class="pane-intro">仲間の得意な仕事を確かめて、今週の遠征を任せましょう。</p>'+
-    `<div class="section-title"><h2>${icon("team")}所属冒険者 ${state.roster.length} 人</h2>${!who("custom")?action("create","＋ 自作冒険者を登録","btn",g.weekStarted(state)?"disabled":""):""}</div><div class="roster-grid">${state.roster.map(card).join("")}</div>
+    `<div class="section-title"><h2>${icon("team")}所属冒険者 ${state.roster.length} 人</h2>${!who("custom")?action("create","＋ 自作冒険者を登録","btn"):""}</div><div class="roster-grid">${state.roster.map(card).join("")}</div>
     ${candidate ? `<h2>所属を希望する応募者</h2><div class="roster-grid">${card(g.recruit(state))}</div>` : ""}${visitorBoard()}${familyPanel()}`;
 }
 function examPanel(p) {
@@ -731,7 +890,7 @@ function journalPage() {
     state.milestones.map(e => `<p class="panel padded">第${e.week}週　${esc(e.message)}</p>`).join("") +
     state.alumni.slice().reverse().map(p => `<details class="panel archive"><summary>第${p.departure.week}週　${esc(p.departure.message)}</summary>
       <p>${ageLabel(p)}</p><ol class="logs">${p.career.map(e => `<li><small>第${e.week}週</small>${esc(e.message)}</li>`).join("")}</ol></details>`).join("") +
-    (state.history.length ? state.history.map((r,i)=>`<details class="panel archive" ${i===0?"open":""}><summary>第${r.week}週　${teamName(teams()[r.partyNumber - 1])}　${g.quests[r.quest].name}　${r.success?"達成":"未達"}</summary>${report(r,false)}</details>`).join("") :
+    (state.history.length ? state.history.map((r,i)=>`<details class="panel archive" data-report="${r.partyNumber}-${r.week}" ${i===0?"open":""}><summary>第${r.week}週　${teamName(teams()[r.partyNumber - 1])}　${g.quests[r.quest].name}　${r.success?"達成":"未達"}</summary>${report(r,false)}</details>`).join("") :
     `<div class="empty panel">${icon("book",36)}<h2>最初の帰還を待っています</h2><p>遠征から帰ると、ここに精算と判断の記録が残ります。</p>${action("nav",hallLabel(),"btn",'data-id="hall"')}</div>`);
 }
 function townPeople() {
@@ -968,7 +1127,7 @@ function townRaidScene() {
 function townView(people,taxes) {
   const totals = g.townTotals(state.town);
   const omen = state.town.landmark === "observatory" ? `<p class="raid-bulletin"><b>今週の星読み ・ ${g.luckyWeek(state.week) ? "吉" : "凶"}</b>　${g.luckyWeek(state.week) ? "深層の罠は静かです。宝箱では星図の導きで鉱石をもう1個拾えます。" : "深層の罠が活発です。星図を携えた隊は罠を感知できます。"}</p>` : "";
-  return raidBulletin() + (page === "town" ? discoveryLetters(true) : "") + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
+  return (page === "town" && handbook.goalsOpen && state.week <= 4 ? starterGoals() : "") + raidBulletin() + (page === "town" ? discoveryLetters(true) : "") + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
     <figcaption>${icon("map",17)} 空きのある区画を選んで建築 <span>拡大中はドラッグで移動できます。外周の街道と防衛区画は立体地形で確認できます。</span></figcaption></figure>
     ${partyBoard(false)}<dl class="town-ledger">
       <div><dt>${icon("home",16)} 通常区画の建築数</dt><dd>${g.territoryPlots.filter(plot=>state.town.plots[plot.id]).length}<small> / ${g.territoryPlots.length} 区画</small></dd></div>
@@ -991,6 +1150,7 @@ function sceneChatterRate(kind) {
 }
 let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
+  rememberGoals();
   refreshNotice();
   const people = townPeople();
   const taxes = g.tourismReport(state);
@@ -1056,6 +1216,7 @@ function render() {
     window.scrollTo(0, restoringView.windowScroll);
     restoringView = null;
   }
+  refreshTutorial();
 }
 const stepSpeed = (team = selected()) => team.trip?.speed === 2 ? 2 : 1;
 const clocks = new Map();
@@ -1092,7 +1253,7 @@ function scheduleStep() {
     if (running) clock.timer = setTimeout(() => advanceExpedition(team), clock.delay);
   }
 }
-let interruptedModal = "", emergencyOrigin;
+let interruptedModal = "", emergencyOrigin, interruptedCreator;
 function surfaceEmergency() {
   const team = urgent();
   if (!team) {
@@ -1100,7 +1261,11 @@ function surfaceEmergency() {
       if (interruptedModal) {
         modal = interruptedModal;
         interruptedModal = "";
-        drawModal();
+        if (modal === "create" && interruptedCreator) {
+          $("#dialog-body").replaceChildren(...interruptedCreator);
+          interruptedCreator = null;
+          updatePreview();
+        } else drawModal();
       } else {
         closeModal();
         if (emergencyOrigin) restoreView(emergencyOrigin);
@@ -1111,6 +1276,8 @@ function surfaceEmergency() {
   }
   if (modal !== "urgent") {
     interruptedModal = modal;
+    if (modal === "create" && $("#dialog-body").childNodes)
+      interruptedCreator = Array.from($("#dialog-body").childNodes);
     // A pending emergency on load opens directly on the party that sent it.
     if (!modal && previousDrawer) emergencyOrigin = currentView();
     if (modal === "profile") profileDraft = readProfile($("#profile-editor"));
@@ -1149,6 +1316,11 @@ function advanceExpedition(team) {
     $("#combat-readout").innerHTML = combatReadout(team.trip);
     $("#trip-log").innerHTML = logs([...team.trip.log].reverse());
     $(".party-members").innerHTML = team.trip.unit.map(u => partyRow(u.id, u)).join("");
+  }
+  if (modal === "prepare") {
+    document.querySelectorAll?.("[data-member-status]").forEach(el => {
+      el.innerHTML = assignmentHint(who(el.dataset.memberStatus));
+    });
   }
   refreshNotice();
   scheduleStep();
@@ -1452,7 +1624,7 @@ function showModal(type) {
   modal=type; $("#dialog").setAttribute("aria-labelledby","dialog-title");
   $("#event-notice").hidden = true;
   if (type==="prepare") {
-    const team = selected(), party = team.party.filter(id => g.available(state,who(id)));
+    const team = selected().pendingFormation || selected(), party = [...team.party];
     draft = {party,dungeon:team.dungeon,leader:party.includes(team.leader) ? team.leader : party[0],policy:team.policy,meds:team.meds};
   }
   if(type==="create"){ customImage="";imageBusy=false;imageTicket++; }
@@ -1504,8 +1676,9 @@ function drawModal() {
     `${ageDetails(who(characterId))}<p>引退すると遠征と育成を終え、町の住人になります。歩みは帰還記録に残ります。引退後の再入団はできません。</p><div class="actions">${action("retire","引退して町に残る","primary")}</div>`;
   if(modal==="gambits") body.innerHTML=gambitEditor();
   if(modal==="profile") body.innerHTML=profileForm();
-  if(modal==="help") body.innerHTML=modalHead("book","遊び方") + weekSpeedControl() + chatterControl() + `<ol class="help-list"><li><b>週の初めに仕事を選ぶ</b><p>リーダーが週初めの伝書で行き先を知らせ、標準で12秒の支度を終えると出発します。ホールで隊ごとの優先条件を選べます。手動で依頼や編成を決めたい週は、伝書の「今週の自動判断を止める」を押してください。</p></li><li><b>遠征パーティーを送り出す</b><p>出発準備で1〜3人とリーダーを選択。体調が悪いとリーダーは休暇を取り、プレイヤーもホールから休暇を指示できます。安全第一は戦闘を避け、素材優先では性格が分岐の決め方に影響します。</p></li><li><b>探索と通信を見守る</b><p>出発すると、仲間は約2秒に1歩進み、採集も戦闘も自分たちで行います。全員の動きと相談の期限を止めるには「全体を一時停止」を選びます。標準では、ゲームを表示している実時間4分で翌週になります。遠征パーティーの「戦術オーダー」から、手番で優先する条件・対象・行動を編集できます。隊だけを止めるには「隊を一時停止」、早く見届けるには速度を×2に。分岐の相談は伝書箱に届き、送信した隊が返事を待ちます。仲間が倒れたときは緊急通信が割り込み、全隊が待機します。通常・緊急ともに翌週が返信期限です。「返信せず翌週へ」で週を進めると、未返信の相談は各隊のリーダーが判断します。早めに切り上げたいときは「帰還する」を選びましょう。</p></li><li><b>成果を翌週へ</b><p>帰還時に自動納品・精算。余った素材はギルド倉庫に入り、売却や工房の研究に使えます。隊は運転資金を残して装備を購入し、残った余剰金をギルド金庫へ戻します。週を締めると翌週です。</p></li></ol>${combatNotes()}<p class="fine">探索の歩みと操作はそのつど保存されます。開き直すと、速度や一時停止、返信待ちも復元されます。</p>${action("close","手帳を閉じる","primary wide")}`;
+  if(modal==="help") body.innerHTML=helpPage();
   if(modal==="work") body.innerHTML=modalHead("sun","今週は休養する")+`<p>遠征を休み、町の手伝いをして翌週を迎えます。週給支給後の収入は＋30G。受注前なので信用は変わりません。</p><div class="actions">${action("do-work","町を手伝い、週を締める","primary")}${action("close","戻る","btn")}</div>`;
+  refreshTutorial();
 }
 function dungeonScouting(dungeon,policy) {
   const sites = new Map();
@@ -1523,15 +1696,23 @@ function dungeonScouting(dungeon,policy) {
   return `<details class="rules"><summary>出現情報 ・ ${g.dungeons[dungeon].name}</summary><ul>${rows.join("")}</ul></details>`;
 }
 function prepForm() {
-  const q=g.quests[selected().quest], quote=g.estimate(state,{...selected(),...draft});
-  const canDepart = !state.town.repairs.hall && g.partyQualifies(state,draft.party,q.rank) && g.partyQualifies(state,draft.party,g.dungeonRank(draft.dungeon));
+  const team = selected(), q = g.quests[team.quest];
+  draft.party = draft.party.filter(id => g.person(state,id));
+  if (!draft.party.includes(draft.leader)) draft.leader = draft.party[0];
+  const quote = g.estimate(state,{...team,...draft});
+  const waiting = g.waitsForReturn(state,team,draft.party);
+  const reserved = draft.party.some(id => g.reservedBy(state,id,team));
+  const eligible = draft.party.every(id => g.available(state,who(id)) && g.currentHP(state,who(id)) > 0);
+  const canDepart = team.phase === "prep" && team.leaveWeek !== state.week && !waiting && !reserved && !team.pendingFormation && eligible && !state.town.repairs.hall && g.partyQualifies(state,draft.party,q.rank) && g.partyQualifies(state,draft.party,g.dungeonRank(draft.dungeon));
   const destinations = Object.entries(g.dungeons).filter(([id])=>g.dungeonOpen(state,id)).map(([id,d])=>{
     const rank = g.dungeonRank(id);
     return `<option value="${id}" ${id===draft.dungeon?"selected":""} ${g.partyQualifies(state,draft.party,rank)?"":"disabled"}>${d.name}（${esc(g.rankLabel(state,rank))}以上）</option>`;
   }).join("");
-  return modalHead("pack",teamName(selected())+"の出発準備")+`<div class="prep-order">${asset(q.item)}<div><small>受注する依頼 ・ 受注した週限り</small><h3>${q.name}</h3><span>${g.items[q.item].name} ×${q.count} ／ 報酬 ${q.reward}G ／ 危険度 ${q.risk}</span></div></div>
+  return modalHead("pack",teamName(team)+(team.phase === "prep" ? "の出発準備" : "の次回編成"))+`<div class="prep-order">${asset(q.item)}<div><small>受注する依頼 ・ 受注した週限り</small><h3>${q.name}</h3><span>${g.items[q.item].name} ×${q.count} ／ 報酬 ${q.reward}G ／ 危険度 ${q.risk}</span></div></div>
     <div class="form-title"><b>遠征メンバー</b><small>${draft.party.length} / 3 人</small></div>
-    <div class="pick-list">${state.roster.map(p=>`<label class="pick ${draft.party.includes(p.id)?"picked":""}"><input type="checkbox" data-pick="${p.id}" ${draft.party.includes(p.id)?"checked":""} ${g.available(state,p)&&!g.awayMember(state,p.id)?"":"disabled"}>${portrait(p)}<span><b>${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ ${esc(g.rankName(state,p))}${assignmentHint(p)}</small></span></label>`).join("")}</div>
+    ${team.pendingFormation ? `<p>${tag("予約済み","gold")} ${team.pendingFormation.party.map(id=>esc(who(id).name)).join("・")}　${action("cancel-formation","予約を取り消す","text-btn")}</p>` : ""}
+    <p aria-live="polite">${reserved ? "他隊で予約済みの冒険者を外すと保存できます。" : waiting ? "帰還後に反映 ・ 関係する隊がすべて戻ると切り替わります。" : "今すぐ反映 ・ 保存すると在町の編成が切り替わります。"}</p>
+    <div class="pick-list">${state.roster.map(p=>`<label class="pick ${draft.party.includes(p.id)?"picked":""}"><input type="checkbox" data-pick="${p.id}" ${draft.party.includes(p.id)?"checked":""} ${g.reservedBy(state,p.id,team) && !draft.party.includes(p.id)?"disabled":""}>${portrait(p)}<span><b>${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ ${esc(g.rankName(state,p))}</small><small data-member-status="${p.id}">${assignmentHint(p)}</small></span></label>`).join("")}</div>
     <label>行き先<select id="dungeon">${destinations}</select></label><small>依頼の必要階級：${esc(g.rankLabel(state,q.rank))}以上。隊員全員が条件を満たすと出発できます。</small>
     ${dungeonScouting(draft.dungeon,draft.policy)}
     ${state.town.landmark === "academy" ? `<p><b>学院の古地図</b>　最初の分岐の先は${g.surveyDungeon(state,draft.dungeon).join(" ／ ")}。</p>` : ""}
@@ -1542,8 +1723,8 @@ function prepForm() {
     <details class="rules"><summary>装備・戦闘の詳細</summary><p>${state.weapon?"木洩れ日の刃："+esc(who(state.wielder)?.name || "未装備")+`（攻撃×${g.bladeMultiplier(state.weaponQuality)}）。工房で付替えできます。`:"武器の基本倍率は1.0。余剰鉱石1個で研究完了、次の準備から80Gで木洩れ日の刃を購入できます。"}</p>${combatNotes()}</details>
     ${draft.policy==="safe"&&q.item==="ore"&&q.count>1?'<p class="warning">安全第一では鉱石は1個までです。この依頼の必要数を集めるには、素材優先で岩場の近道へ。</p>':""}
     <div class="estimate"><div><b>出発前の見積（合計収支）</b><strong>${signed(quote.net)} G</strong></div><p>報酬 ${quote.reward} → 上納 ${quote.tribute}（${quote.tributeRate}%）→ 隊の取り分 ${quote.partyReward} G</p><p>仲間への分配 −${quote.share} ／ 食料 −${quote.food} ／ 薬 −${quote.medicine} ／ 給与 −${quote.wages} G</p><small>達成・全薬使用を想定。全員の週給は最初に出発する隊で精算します。補給費 ${quote.food+quote.medicine} G は隊が負担し、不足分をギルドが支援します。</small></div>
-    ${action("depart",state.town.repairs.hall ? "ギルドホールの修理待ち" : icon("flag",18)+" この編成で出発する","primary wide",canDepart&&!g.claimed(state,selected().quest,selected())&&g.expeditionFunds(state,selected())>=quote.food+quote.medicine?"":"disabled")}
-    <div class="prep-footer">${action("keep-party","編成を保存","text-btn",draft.party.length?"":"disabled")}${action("manage","名簿で雇用・登録","text-btn")}${action("work","遠征を休んで町を手伝う","text-btn",g.weekStarted(state)?"disabled":"")}</div>`;
+    ${team.phase !== "prep" || waiting ? "" : action("depart",state.town.repairs.hall ? "ギルドホールの修理待ち" : icon("flag",18)+" この編成で出発する","primary wide",canDepart&&!g.claimed(state,selected().quest,selected())&&g.expeditionFunds(state,selected())>=quote.food+quote.medicine?"":"disabled")}
+    <div class="prep-footer">${action("keep-party",waiting?"帰還後の編成を予約":"編成を保存",waiting?"primary":"text-btn",draft.party.length && !reserved?"":"disabled")}${action("manage","名簿で雇用・登録","text-btn")}${action("work","遠征を休んで町を手伝う","text-btn",g.weekStarted(state)?"disabled":"")}</div>`;
 }
 function options(obj,selected) { return Object.entries(obj).map(([k,v])=>`<option value="${k}"${k===selected ? " selected" : ""}>${esc(v.name || v)}</option>`).join(""); }
 function initialSkillOptions(job) {
@@ -1632,7 +1813,7 @@ async function readFace(input) {
   } catch(error){input.value="";toast(error.message || "画像を読み込めませんでした。");}
   finally { if(ticket===imageTicket){imageBusy=false;updatePreview();} }
 }
-function closeModal() { characterReturn = null; $("#dialog").close(); modal=""; refreshNotice(); }
+function closeModal() { characterReturn = null; $("#dialog").close(); modal=""; refreshNotice(); refreshTutorial(); }
 let drawerHistory = [];
 function currentView() {
   return {page, party:state.selectedParty, shop:page === "shops" ? activeShop : null,
@@ -1687,12 +1868,26 @@ document.addEventListener("click",event=>{
   const {action:cmd,id}=button.dataset;
   try {
     switch(cmd) {
+      case "tour-go": tourGo(id); return;
+      case "tour-pause": handbook.status = "paused"; save(); refreshTutorial(); toast("案内を中断しました。「遊び方」から再開できます。"); return;
+      case "tour-restart": case "tour-resume":
+        if (cmd === "tour-restart") { handbook.step = 0; handbook.party = state.selectedParty; handbook.missedPrep = false; }
+        handbook.status = "active";
+        closeModal();
+        navigate(["town","roster","roster","hall","hall","mail","hall"][handbook.step],{party:handbook.party});
+        save(); showTourTarget(); return;
+      case "toggle-goals":
+        handbook.goalsOpen = !handbook.goalsOpen;
+        save(); render();
+        if (modal === "help") drawModal();
+        return;
       case "notice-open": acknowledgeNotice(true); return;
       case "notice-dismiss": acknowledgeNotice(false); return;
       case "town-mode": changeTownView(id==="stack"); return;
       case "town-zoom": townScene.stop.setZoom(townZoom + Number(id)*.25); return;
       case "town-turn": changeTownView(true,Number(id)); return;
       case "nav":
+        if (id === "roster" && tourHere() && handbook.step === 0) { handbook.step = 1; save(); }
         navigate(id);
         if (button.dataset.section === "guests") {
           const guests = $("#management .guest-board");
@@ -1822,16 +2017,26 @@ document.addEventListener("click",event=>{
       case "dialog-back": showModal("character"); return;
       case "close": closeModal(); return;
       case "help": case "work": case "prepare": case "create":
-        if ((cmd === "prepare" && selected().phase !== "prep") || (cmd === "create" && g.weekStarted(state))) return;
+        if (cmd === "create" && who("custom")) return;
+        if (cmd === "prepare" && tourHere() && handbook.step === 1) { handbook.step = 2; save(); }
         showModal(cmd); return;
       case "manage": closeModal(); navigate("roster"); return;
-      case "quest": g.setQuest(state,id,selected()); break;
+      case "quest":
+        g.setQuest(state,id,selected());
+        if (tourHere() && handbook.step === 3) handbook.step = 4;
+        break;
       case "hire": g.hire(state); toast("シオンが名簿に加わりました。編成で起用できます。"); break;
+      case "cancel-formation":
+        delete selected().pendingFormation;
+        showModal("prepare"); break;
       case "keep-party":
-        g.configure(state,draft.party,draft.leader,draft.policy,draft.meds,selected(),draft.dungeon);
-        closeModal(); toast("編成と補給の計画を保存しました。"); break;
+        g.saveFormation(state,selected(),draft);
+        if (tourHere() && handbook.step === 2) { handbook.step = 3; changePage("hall"); }
+        closeModal(); toast(selected().pendingFormation ? "帰還後の編成を予約しました。" : "編成と補給の計画を保存しました。"); break;
       case "depart":
-        g.depart(state,selected(),draft,true); closeModal(); changePage("hall"); window.scrollTo(0,0); break;
+        g.depart(state,selected(),draft,true);
+        if (tourHere() && handbook.step >= 1 && handbook.step <= 4) { handbook.step = 5; handbook.tripWeek = selected().trip.week; }
+        closeModal(); changePage("hall"); window.scrollTo(0,0); break;
       case "pause":
       case "speed":
         if (selected().phase !== "explore" || selected().trip.pending) return;
@@ -2038,6 +2243,7 @@ $("#dialog").addEventListener("close",()=>{
   modal="";
   characterReturn = null;
   refreshNotice();
+  refreshTutorial();
   if (characterId) {
     if (page === "roster") {
       render();
@@ -2071,8 +2277,7 @@ function tickWorld() {
   if (state.clock.paused || document.hidden) return;
   const changed = g.advanceTime(state,elapsed);
   if (changed) {
-    if ((modal === "prepare" && (selected().phase !== "prep" || selected().leaveWeek === state.week)) ||
-        (["create","work"].includes(modal) && g.weekStarted(state))) closeModal();
+    if (modal === "work" && g.weekStarted(state)) closeModal();
     surfaceEmergency(); render(); scheduleStep();
     if (modal === "guest" && !g.visitorList(state).some(p=>p.id===guestId)) closeModal();
     if (["guest","prepare","plot","resident-family"].includes(modal)) drawModal();

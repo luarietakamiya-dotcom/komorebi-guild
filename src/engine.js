@@ -1808,6 +1808,7 @@ const Guild = (() => {
     restoreGuildProgress(s);
     discoverByGrade(s);
     expireCalls(s);
+    applyReadyFormations(s);
     return s;
   }
   const reportFor = (s, team) => s.history.find(r => r.week === s.week && (r.partyNumber ?? 1) === partyNumber(s, team));
@@ -1820,18 +1821,42 @@ const Guild = (() => {
   function configure(s, ids, leader, policy, meds, team = s, dungeon = team.dungeon) {
     prep(team);
     check(team.leaveWeek !== s.week, "休暇中の隊は翌週まで編成を休みます。");
+    validateFormation(s,ids,leader,policy,meds,dungeon);
+    check(ids.every(id => available(s,person(s,id)) && currentHP(s,person(s,id)) > 0), "療養中は出発できません。");
+    check(!ids.some(id => awayMember(s,id)), "他隊の遠征メンバーは編成できません。");
+    check(!team.pendingFormation && !ids.some(id => reservedBy(s,id,team)), "予約編成の反映を待ってください。");
+    applyFormation(s,team,{party:ids,leader,policy,meds,dungeon});
+  }
+  function validateFormation(s,ids,leader,policy,meds,dungeon) {
     check(dungeonOpen(s, dungeon), "このダンジョンはまだ解放されていません。");
     check(ids.length >= 1 && ids.length <= 3 && new Set(ids).size === ids.length, "1〜3人を選んでください。");
-    check(ids.every(id => available(s,person(s,id)) && currentHP(s,person(s,id)) > 0), "療養中は出発できません。");
+    check(ids.every(id => person(s,id)), "所属している冒険者を選んでください。");
     check(partyQualifies(s, ids, dungeonRank(dungeon)), "このダンジョンには全員の階級が足りている必要があります。");
     check(ids.includes(leader), "出撃するリーダーを選んでください。");
     check(Object.hasOwn(policies, policy) && Number.isInteger(meds) && meds >= 0 && meds <= 3, "方針または薬の本数を確認してください。");
-    check(!ids.some(id => awayMember(s, id)), "他隊の遠征メンバーは編成できません。");
+  }
+  const reservedBy = (s,id,team) => parties(s).find(other => other !== team && other.pendingFormation?.party.includes(id));
+  const waitsForReturn = (s,team,ids) => team.phase === "explore" || ids.some(id => awayMember(s,id));
+  function saveFormation(s,team,{party,leader,policy,meds,dungeon}) {
+    validateFormation(s,party,leader,policy,meds,dungeon);
+    check(!party.some(id => reservedBy(s,id,team)), "他隊で予約済みの冒険者がいます。先にその隊の予約を変更してください。");
+    const plan = {party:[...party],leader,policy,meds,dungeon};
+    if (waitsForReturn(s,team,party)) team.pendingFormation = plan;
+    else applyFormation(s,team,plan);
+  }
+  function applyReadyFormations(s) {
+    for (const team of parties(s)) {
+      const plan = team.pendingFormation;
+      if (plan && !waitsForReturn(s,team,plan.party)) applyFormation(s,team,plan);
+    }
+  }
+  function applyFormation(s,team,{party:ids,leader,policy,meds,dungeon}) {
     for (const other of parties(s)) {
-      if (other === team || other.phase !== "prep") continue;
+      if (other === team || other.phase === "explore") continue;
       other.party = other.party.filter(id => !ids.includes(id));
       if (!other.party.includes(other.leader)) other.leader = other.party[0] || null;
     }
+    delete team.pendingFormation;
     Object.assign(team, { party: [...ids], leader, policy, meds, dungeon });
     for (const item of s.equipment) {
       if (item.owner && !parties(s)[item.owner-1].party.includes(item.wearer)) item.wearer = null;
@@ -1861,7 +1886,7 @@ const Guild = (() => {
     if (p.portrait) p.useJobPortrait = !!data.useJobPortrait;
   }
   function register(s, data) {
-    check(!weekStarted(s), "登録はその週の最初の出発前にできます。"); check(!knownPerson(s, "custom"), "自作冒険者は1人までです。");
+    check(!knownPerson(s, "custom"), "自作冒険者は1人までです。");
     const name = clean(data.name, 8);
     // Legacy registration templates also used guard, druid and beastmaster.
     check(name && (startingJobs.includes(data.job) || regularJobs.includes(data.job)) && Object.hasOwn(traits, data.trait) && Object.hasOwn(tones, data.tone), "名前・職業・性格・口調を確認してください。");
@@ -2783,6 +2808,12 @@ const Guild = (() => {
     s.roster = s.roster.filter(member => member !== p);
     s.alumni.push(p);
     for (const team of parties(s)) {
+      const plan = team.pendingFormation;
+      if (plan?.party.includes(p.id)) {
+        plan.party = plan.party.filter(id => id !== p.id);
+        if (plan.leader === p.id) plan.leader = plan.party[0];
+        if (!plan.party.length) delete team.pendingFormation;
+      }
       team.party = team.party.filter(id => id !== p.id);
       if (team.leader === p.id) team.leader = team.party[0] || null;
     }
@@ -2881,6 +2912,7 @@ const Guild = (() => {
       sold: 0, donated: 0, returnedGold: guildGold(s), returnedWallet:team.wallet });
     if (s.history[0].cleared) recordFeat(s,"clear",dungeons[t.dungeon].name+"を踏破");
     checkGuildPromotion(s);
+    applyReadyFormations(s);
   }
   function sell(s, key, reportTeam = null) {
     check(Object.hasOwn(items,key), "売れる余剰品がありません。");
@@ -2949,6 +2981,10 @@ const Guild = (() => {
       if (team.phase !== "prep" || team.decisionWeek === s.week || !team.party.length) continue;
       const members = team.party.map(id => person(s,id)), leader = person(s,team.leader);
       if (!leader) continue;
+      if (team.pendingFormation || team.party.some(id => reservedBy(s,id,team))) {
+        plans.push({team,message:leader.name+"より「予約編成が整うまで町で待機します。」"});
+        continue;
+      }
       if (s.raids.active || team.party.some(id=>s.raids.warning?.assignments?.[id])) {
         plans.push({team,message:leader.name+"より「町の守備につきます。」"});
         continue;
@@ -3603,7 +3639,7 @@ const Guild = (() => {
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
     dungeons, dungeonOpen, encounterKinds, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
     orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, plotForSite, buildings, buildingCatalog, commercialBuildings, tourismReport, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
-    payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, hire, register, estimate, depart, step, choices, reply,
+    payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, saveFormation, reservedBy, waitsForReturn, hire, register, estimate, depart, step, choices, reply,
     returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile, maxTributeRate,
     nextDay:nextWeek, dayStarted:weekStarted, dayMillis:weekMillis };
 })();

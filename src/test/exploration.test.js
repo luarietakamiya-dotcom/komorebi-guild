@@ -24,7 +24,7 @@ function openGame(saved, world, media = {}) {
   });
   element("#creator").fields = {job:"sword",trait:"bold",tone:"polite"};
   const scenePeople = vm.runInNewContext(app + "\n;({townPeople, expeditionPeople, selected})", {
-    Guild, URLSearchParams, performance:world || performance, cancelAnimationFrame() {}, window: { setInterval:world?.setInterval, location: { search: "" }, scrollTo() {} },
+    Guild, URLSearchParams, performance:world || {now:()=>0}, cancelAnimationFrame() {}, window: { setInterval:world?.setInterval, location: { search: "" }, scrollTo() {} },
     FormData: class extends Map { constructor(form) { super(Object.entries(form.fields)); } },
     Image:media.Image, URL:media.URL,
     document: { body: element("body"), querySelector: element, createElement:media.createElement, addEventListener(type, fn) { handlers[type] = fn; } },
@@ -1656,4 +1656,145 @@ test("人物手帳の子画面は戻る操作とEscで手帳の同じ位置に�
   game.escape();
   assert.equal(game.element("#dialog").open,false);
   assert.match(game.html("#screen"), /id="management" aria-label="冒険者名簿"/);
+});
+
+test("初回案内で編成・受注・出発・伝書・帰還精算を実際の画面から一巡する", () => {
+  const game = openGame();
+  assert.match(game.html("#tutorial"),/町を見渡す/);
+  assert.match(game.html("#screen"),/最初の目標/);
+  game.click("tour-go","roster");
+  assert.equal(game.state().decisionWeek,1);
+  assert.match(game.html("#screen"),/冒険者名簿/);
+  game.click("tour-go","prepare");
+  assert.match(game.html("#dialog-tutorial"),/編成を保存/);
+  game.select("leader","gald");
+  game.click("keep-party");
+  assert.equal(game.state().leader,"gald");
+  assert.match(game.html("#tutorial"),/ホールで依頼を選ぶ/);
+  game.click("quest","herb");
+  game.click("tour-go","prepare");
+  assert.match(game.html("#dialog-tutorial"),/受注が確定/);
+  game.click("depart");
+  assert.equal(game.state().phase,"explore");
+  assert.equal(game.state().handbook.goals.quest,true);
+  game.click("tour-go","mail");
+  assert.match(game.html("#screen"),/マスターの指示で今週の自動出発を見送り/);
+  game.click("tour-go","watch");
+  for (let i=0; i<20 && game.state().phase === "explore"; i++) game.tickFirst();
+  assert.equal(game.state().history.length,1);
+  assert.match(game.html("#screen"),/帳簿.*実額/s);
+  assert.match(game.html("#tutorial"),/帳簿を確認して案内を終える/);
+  game.click("tour-go","finish");
+  assert.equal(game.reload().element("#tutorial").hidden,true);
+  game.click("nav","town");
+  assert.doesNotMatch(game.html("#screen"),/依頼を1件受けて出発する|遠征隊を町に迎える/);
+  game.click("plot","brook"); game.click("build","farm");
+  assert.doesNotMatch(game.html("#screen"),/最初の目標/);
+});
+
+test("中断位置を保存し、遊び方から再開・やり直しができる", () => {
+  let game = openGame();
+  game.click("tour-go","roster");
+  game.click("tour-go","prepare");
+  game.click("tour-pause");
+  game = game.reload();
+  assert.ok(game.element("#tutorial").hidden);
+  game.click("help");
+  assert.match(game.html("#dialog-body"),/パーティーを編成する」から再開/);
+  game.click("tour-resume");
+  assert.match(game.html("#tutorial"),/編成を開く/);
+  game.click("tour-go","prepare");
+  assert.equal(game.element("#dialog-tutorial").hidden,false);
+  game.click("close"); game.click("help"); game.click("tour-restart");
+  assert.equal(game.state().handbook.step,0);
+  assert.equal(game.state().week,1);
+  assert.equal(game.state().gold,240);
+});
+
+test("旧セーブでは案内も目標も任意で開け、目標を閉じた状態と序盤の期限を守る", () => {
+  const old = Guild.initial();
+  const game = openGame(JSON.stringify(old));
+  assert.ok(game.element("#tutorial").hidden);
+  assert.doesNotMatch(game.html("#screen"),/最初の目標/);
+  game.click("help");
+  for (const topic of ["運営の基本","探索と戦術オーダー","町づくりと商業","防衛","世代と結婚","ランクと試験","デバフと治療"]) {
+    assert.ok(game.html("#dialog-body").includes("<summary>"+topic+"</summary>"));
+  }
+  game.click("toggle-goals"); game.click("close");
+  assert.match(game.html("#screen"),/最初の目標/);
+  game.click("toggle-goals");
+  assert.doesNotMatch(game.reload().html("#screen"),/最初の目標/);
+  game.click("help"); game.click("tour-restart");
+  assert.equal(game.element("#tutorial").hidden,false);
+  const later = game.state();
+  later.week = 5; later.handbook.goalsOpen = true;
+  const veteran = openGame(JSON.stringify(later));
+  assert.doesNotMatch(veteran.html("#screen"),/最初の目標/);
+  veteran.click("help");
+  assert.match(veteran.html("#dialog-body"),/最初の目標/);
+});
+
+test("自動出発後に案内を始めても、実行済みの出発を繰り返さず伝書と帰還報告を開ける", () => {
+  let tickWorld;
+  let now = 0;
+  const game = openGame(undefined,{now:()=>now,setInterval(fn) { tickWorld = fn; }});
+  now = Guild.departureDelay; tickWorld();
+  game.click("tour-go","roster");
+  assert.match(game.html("#tutorial"),/すでに依頼を受けました/);
+  game.click("tour-go","mail");
+  assert.equal(game.state().handbook.step,5);
+  game.click("tour-go","watch");
+  game.click("return");
+  game.click("next");
+  game.click("tour-go","history");
+  assert.match(game.html("#tutorial"),/帳簿を確認して案内を終える/);
+});
+
+test("名簿で登録中に朝を迎えても入力を続けられ、遠征中にも登録画面を開ける", () => {
+  let now = 0, tickWorld;
+  const game = openGame(JSON.stringify(Guild.initial()),{now:()=>now,setInterval(fn) { tickWorld = fn; }});
+  game.click("nav","roster");
+  game.click("create");
+  now = Guild.departureDelay; tickWorld();
+  assert.equal(game.state().phase,"explore");
+  assert.ok(game.element("#dialog").open);
+  assert.match(game.html("#dialog-body"),/id="creator"/);
+  game.click("close");
+  assert.ok(/data-action="create"[^>]*>/.test(game.html("#screen")));
+  assert.ok(!/data-action="create"[^>]*disabled/.test(game.html("#screen")));
+  game.click("create");
+  game.submitCreator({name:"ユキ",job:"sword",trait:"kind",tone:"normal"});
+  assert.ok(game.townSprite("custom"));
+  assert.equal(game.state().trip.unit.length,3);
+});
+
+test("編集中の朝の出発で予約表示へ切り替え、再読込後も予約の編集と取消ができる", () => {
+  let now = 0, tickWorld;
+  const s = Guild.initial();
+  Guild.register(s,{name:"ユキ",job:"sword",trait:"kind",tone:"normal"});
+  let game = openGame(JSON.stringify(s),{now:()=>now,setInterval(fn) { tickWorld = fn; }});
+  game.click("nav","roster");
+  game.click("prepare");
+  game.changePick("mina",false);
+  game.changePick("custom",true);
+  assert.match(game.html("#dialog-body"),/今すぐ反映/);
+  now = Guild.departureDelay; tickWorld();
+  assert.match(game.html("#dialog-body"),/探索中 ・ 帰還まで最短/);
+  assert.match(game.html("#dialog-body"),/data-member-status="custom">在町/);
+  assert.match(game.html("#dialog-body"),/帰還後の編成を予約/);
+  assert.ok(!game.html("#dialog-body").includes('data-action="depart"'));
+  game.click("keep-party");
+  game = game.reload();
+  game.click("nav","hall");
+  assert.match(game.html("#screen"),/編成予約あり/);
+  game.click("prepare");
+  assert.match(game.html("#dialog-body"),/data-pick="custom" checked/);
+  game.click("cancel-formation");
+  assert.ok(!game.state().pendingFormation);
+  game.changePick("mina",false);
+  game.changePick("custom",true);
+  game.click("keep-party");
+  game.click("return");
+  assert.deepEqual(game.state().party,["gald","popo","custom"]);
+  assert.equal(game.state().history[0].leader,"mina");
 });
