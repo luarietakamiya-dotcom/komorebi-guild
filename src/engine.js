@@ -994,7 +994,7 @@ const Guild = (() => {
   function oldPath(steps, rocky) {
     return ["gate","meadow","fork", ...(rocky ? ["pass","vein"] : ["grove"]), "home"].slice(0, steps+1);
   }
-  const enemy = { name: "苔イノシシ", hp: 13, atk: 31, def: 4, spd: 10 };
+  const enemy = { name: "苔イノシシ", hp: 13, atk: 31, def: 4, spd: 10, note:"残りHPの低い仲間に突進する。" };
   const tones = { polite: "です", normal: "だ", casual: "だよ", rough: "だぜ" };
   const dialogue = {
     fork: {
@@ -1223,7 +1223,7 @@ const Guild = (() => {
   function recordRaidFeats(s,r) {
     const road = roadNames[r.road];
     if (r.repelled) recordFeat(s,"repel",road+"の襲撃を撃退",r.week);
-    if (r.herb) recordFeat(s,"raidBoss",road+"の襲撃のヌシを討伐",r.week);
+    if (r.herb) recordFeat(s,"raidBoss",road+"の"+(foes[r.bossKind]?.name || "襲撃のヌシ")+"を討伐",r.week);
   }
   function restoreGuildProgress(s) {
     if (s.guildProgress) return;
@@ -2101,12 +2101,23 @@ const Guild = (() => {
   const actions = {attack:"通常攻撃", cover:"かばう（攻撃を代わりに受ける）", heal:"手当て", medicine:"回復薬", cleanse:"動揺を鎮める", flee:"逃げる"};
   const foes = {
     boar:enemy,
-    crystal:{name:"晶角イノシシ", hp:18, atk:18, def:5, spd:6},
-    warden:{name:"双月角の番獣", hp:32, atk:33, def:7, spd:9},
-    goblin:{name:"ゴブリン", hp:16, atk:26, def:4, spd:11, captor:true, pregnancy:.01, sprite:"shion"},
-    orc:{name:"オーク", hp:27, atk:34, def:7, spd:8, captor:true, pregnancy:.10, sprite:"gald"},
-    bandit:{name:"盗賊団員", hp:22, atk:28, def:5, spd:12, captor:true, sprite:"shusai"}
+    crystal:{name:"晶角イノシシ", hp:18, atk:18, def:5, spd:6, spell:"晶鳴り", note:"晶鳴りを詠唱し、次の手番で相手を動揺させる。"},
+    warden:{name:"双月角の番獣", hp:48, atk:40, def:10, spd:9, boss:true, spell:"月角の咆哮", note:"最深部を単独で守る。月角の咆哮を詠唱し、次の手番に強打と動揺を与える。"},
+    goblin:{name:"ゴブリン", hp:16, atk:26, def:4, spd:11, captor:true, pregnancy:.01, note:"二体一組で襲い、残りHPの低い相手に攻撃を集中する。"},
+    orc:{name:"オーク", hp:27, atk:34, def:7, spd:8, captor:true, pregnancy:.10, note:"残りHPの高い相手を狙い、力押しで前衛を崩す。"},
+    bandit:{name:"盗賊団員", hp:22, atk:28, def:5, spd:12, captor:true, note:"素早く動き、残りMPの多い術者を優先して襲う。"},
+    shell:{name:"水鏡ガメ", hp:31, atk:20, def:12, spd:5, note:"硬い甲羅にこもり、HPが半分以下になると一度だけ6回復する。"},
+    moth:{name:"星粉ガ", hp:15, atk:16, def:3, spd:17, note:"先手を取りやすい。鱗粉で攻撃した相手のMPを2奪う。"},
+    ram:{name:"鉄冠の破城獣", hp:54, atk:42, def:12, spd:7, boss:true, note:"襲撃の大将。接近した防衛施設に鉄冠を叩きつけ、追加で6の損傷を与える。"}
   };
+  const dungeonPacks = {
+    canal:[["goblin","goblin"],["orc"],["bandit"],["shell"],["warden"]],
+    archive:[["moth"],["bandit","moth"],["orc"],["goblin","goblin"],["shell"],["crystal","moth"],["orc","moth"],["warden"]]
+  };
+  function encounterKinds(dungeon,node,policy) {
+    if (dungeon === "moss") return node === "vein" && policy === "bold" ? ["boar","crystal"] : ["boar"];
+    return dungeonPacks[dungeon][dungeons[dungeon].rooms[node].depth-1];
+  }
   const allySelectors = s => ({self:"自分", lowest:"残HPが最も低い味方", leader:"リーダー",
     ...Object.fromEntries(s.roster.map(p => [p.id,p.name]))});
   const subjects = (s,r) => ({...allySelectors(s), lowest:r?.hpOrder === "ratio" ? "かばえる味方の誰か" : "味方の誰か", foe:"敵のいずれか"});
@@ -2169,11 +2180,8 @@ const Guild = (() => {
       u.state = "severe";
       if (!u.injury) injure(s,t,u,"重度の捻挫",2);
     }
-    const floor = tripRooms(t)[t.node].depth;
-    const boss = t.dungeon !== "moss" && floor === dungeons[t.dungeon].floors;
-    const kind = t.dungeon === "moss" ? "boar" : boss ? "warden" : ["goblin","orc","bandit"][(floor-1)%3];
-    const enemies = [newFoe("enemy",kind)];
-    if (t.dungeon !== "moss" || (t.node === "vein" && t.policy === "bold")) enemies.push(newFoe("caster","crystal"));
+    const enemies = encounterKinds(t.dungeon,t.node,t.policy).map((kind,i) =>
+      newFoe(i === 0 ? "enemy" : kind === "crystal" ? "caster" : "flank",kind));
     t.fight = {enemies, turn:0, order:[], guards:{}, haste:{}, shaken:{}, covers:{}};
     eachPair(t.unit.filter(u => u.state === "ok").map(u => u.id),(a,b) => bondTime(s,a,b,4));
     orderRound(s,t);
@@ -2199,7 +2207,7 @@ const Guild = (() => {
   function combatLog(t,message,actor,target,kind,amount,rule,protectedId) {
     const event = {actor,target,kind,amount};
     const foe = t.fight?.enemies.find(e => e.id === target);
-    if (foe && foes[foe.kind].sprite) event.targetKind = foe.kind;
+    if (foe) event.targetKind = foe.kind;
     if (rule) event.rule = rule;
     if (protectedId) event.protectedId = protectedId;
     log(t,message,{combat:event});
@@ -2306,13 +2314,27 @@ const Guild = (() => {
     delete enemy.feint;
     return reduced;
   }
+  function monsterTarget(kind,units) {
+    if (kind === "orc") return units.sort((a,b) => b.hp-a.hp)[0];
+    if (kind === "bandit") return units.sort((a,b) => b.mp-a.mp)[0];
+    return units.sort((a,b) => a.hp-b.hp)[0];
+  }
+  function shellRecovery(e,maxHP) {
+    if (e.kind !== "shell" || e.recovered || e.hp > maxHP/2) return 0;
+    e.recovered = true;
+    const amount = Math.min(6,maxHP-e.hp);
+    e.hp += amount;
+    return amount;
+  }
   function enemyTurn(s,team,e,round) {
     const t = team.trip, f = t.fight, stats = foes[e.kind];
-    const intended = t.unit.filter(u => u.state === "ok").sort((a,b) => a.hp-b.hp)[0];
+    const intended = monsterTarget(e.kind,t.unit.filter(u => u.state === "ok"));
     if (!intended) return defeatedParty(s,team);
-    if (e.kind === "crystal" && !e.casting) {
+    const healed = shellRecovery(e,stats.hp);
+    if (healed) return combatLog(t,stats.name+"が甲羅にこもり、HPが"+healed+"回復。",e.id,e.id,"heal",healed);
+    if (stats.spell && !e.casting) {
       e.casting = true;
-      return combatLog(t,stats.name + "が晶鳴りを詠唱。",e.id,e.id,"cast",0);
+      return combatLog(t,stats.name+"が"+stats.spell+"を詠唱。",e.id,e.id,"cast",0);
     }
     let protector = t.unit.find(u => u.state === "ok" && f.covers[u.id] === intended.id);
     if (!protector && intended.hp <= outfittedStat(s,person(s,intended.id),"hp")/2) {
@@ -2330,8 +2352,10 @@ const Guild = (() => {
       bondTime(s,protector.id,intended.id,6);
     }
     target.hp = Math.max(0,target.hp-hit);
+    if (e.kind === "moth") target.mp = Math.max(0,target.mp-2);
     if (e.casting) f.shaken[p.id] = true;
-    combatLog(t,intercept + stats.name + " → " + p.name + "に" + hit + "ダメージ（残HP" + target.hp + "）。" + (e.casting ? "晶鳴りで動揺。" : ""),
+    combatLog(t,intercept + stats.name + " → " + p.name + "に" + hit + "ダメージ（残HP" + target.hp + "）。" +
+      (e.casting ? stats.spell+"で動揺。" : e.kind === "moth" ? "鱗粉でMPが減少。" : ""),
       e.id,p.id,e.casting ? "skill" : "attack",hit,undefined,protector && intended.id);
     e.casting = false;
     if (!target.hp) {
@@ -3036,6 +3060,13 @@ const Guild = (() => {
     const plan = {routeVersion:2, outer:true, road:roads[Math.floor(Math.random()*roads.length)], tier, surprise,
       count:surprise ? 2+Math.floor(tier/2) : 3+tier, boss:s.raids.reports.length>0 && Math.random()<.12,
       due:surprise ? 0 : Math.round(weekMillis*3/7)};
+    const columns = {
+      west:["boar","goblin","goblin","orc"], east:["orc","bandit","boar"],
+      north:["moth","bandit","orc"], riverside:["shell","bandit","shell"],
+      south:["goblin","goblin","orc"]
+    };
+    const column = columns[plan.road];
+    plan.kinds = Array.from({length:plan.count},(_,i) => plan.boss && i === plan.count-1 ? "ram" : column[i%column.length]);
     if (observed) {
       plan.dueWeek = Math.max(s.week,s.raids.nextWeek);
       plan.observed = true;
@@ -3046,8 +3077,10 @@ const Guild = (() => {
   function beginRaid(s,plan) {
     const enemies = Array.from({length:plan.count}, (_,i) => {
       const boss = !!plan.boss && i === plan.count-1;
-      const hp = (boss ? 24 : 10) + plan.tier*2;
-      return {hp,maxHP:hp,boss,step:-i,...(plan.routeVersion === 2 ? {id:"foe-"+i,kind:boss ? "warden" : "boar"} : {})};
+      const kind = plan.routeVersion === 2 && plan.kinds?.[i];
+      const hp = (kind ? Math.ceil(foes[kind].hp*.6) : boss ? 24 : 10) + plan.tier*2;
+      const paired = kind === "goblin" && plan.kinds[i-1] === "goblin";
+      return {hp,maxHP:hp,boss,step:paired ? 1-i : -i,...(plan.routeVersion === 2 ? {id:"foe-"+i,kind:kind || (boss ? "warden" : "boar")} : {})};
     });
     s.raids.warning = null;
     s.raids.active = {...plan,knights:s.town.landmark === "castle",enemies,elapsed:0,hits:[],damaged:[],injured:[],gold:0,food:0,discontent:0};
@@ -3131,11 +3164,12 @@ const Guild = (() => {
     const credit = repelled ? Math.min(100-s.metrics[1],2+r.tier) : 0;
     s.metrics[1] += credit;
     s.raids.credit = (s.raids.credit || 0) + credit;
-    if (herb) s.milestones.unshift({week:s.week,message:roadNames[r.road]+"で襲撃のヌシを討伐。町の防衛の偉業として記す。"});
+    const bossKind = fallen.find(e=>e.boss)?.kind;
+    if (herb) s.milestones.unshift({week:s.week,message:roadNames[r.road]+"で"+(bossKind ? "《"+foes[bossKind].name+"》と呼ばれるヌシを討伐。" : "襲撃のヌシを討伐。")+"町の防衛の偉業として記す。"});
     const {road,surprise,count,damaged,injured,gold,food,discontent} = r;
     const subsidy = s.town.landmark==="exchange" && damaged.length ? 72 : 0;
     if (subsidy) s.town.repairFund = (s.town.repairFund || 0)+subsidy;
-    s.raids.reports.unshift({contributions:r.contributions || {},landmark:s.town.landmark,subsidy,week:s.week,road,surprise,count,damaged,injured,gold,food,discontent,ore,herb,credit,repelled,knights:!!r.knights});
+    s.raids.reports.unshift({contributions:r.contributions || {},landmark:s.town.landmark,subsidy,week:s.week,road,surprise,count,damaged,injured,gold,food,discontent,ore,herb,...(bossKind ? {bossKind} : {}),credit,repelled,knights:!!r.knights});
     recordRaidFeats(s,s.raids.reports[0]);
     checkGuildPromotion(s);
     s.raids.active = null;
@@ -3183,7 +3217,7 @@ const Guild = (() => {
       for (const e of nearby) {
         if (!e.hp || distanceOnMap(center,road[e.step])>78 || e.contacted?.includes(site)) continue;
         (e.contacted ??= []).push(site);
-        facility.hp = Math.max(0,facility.hp-(4+r.tier+Number(e.boss)*3));
+        facility.hp = Math.max(0,facility.hp-(4+r.tier+Number(e.boss)*3+(e.kind==="ram" ? 6 : 0)));
         if (s.town.landmark==="manufactory" && !r.patched[site]) {
           r.patched[site] = true;
           facility.hp = Math.min(spec.maxHP,facility.hp+8);
@@ -3251,14 +3285,19 @@ const Guild = (() => {
     }
     for (const e of enemies.filter(e=>e.hp)) {
       const available = unit.filter(u=>u.state==="ok" && u.hp>0);
-      const intended = available.sort((a,b)=>a.hp-b.hp)[0];
+      const intended = monsterTarget(e.kind,available);
       if (!intended) break;
+      if (shellRecovery(e,e.maxHP)) continue;
       const u = available.find(a=>fight.covers[a.id]===intended.id) || intended;
       const p = getPerson(u.id);
-      const hit = damageAfterFeint(e,Math.max(1,7+r.tier+(e.boss ? 5 : 0)-Math.floor(outfittedStat(s,p,"def")/3)-
+      const hit = damageAfterFeint(e,Math.max(1,7+r.tier+(e.boss ? 5 : e.kind==="orc" ? 3 : 0)-Math.floor(outfittedStat(s,p,"def")/3)-
         (fight.guards[p.id] || 0)-(s.town.landmark==="baths" ? 2 : 0)));
       p.missingHP += Math.min(u.hp,hit);
       u.hp = currentHP(s,p);
+      if (e.kind==="moth") {
+        p.spentMP += Math.min(2,u.mp);
+        u.mp = currentMP(p);
+      }
       if (!u.hp) {
         r.withdrawn[p.id] = true;
         if (!r.injured.includes(p.name)) r.injured.push(p.name);
@@ -3489,7 +3528,7 @@ const Guild = (() => {
   return { tierNames, tierLevels, treeJobs, jobName, promotionStatus, variantJob, variantJobs, hairColors, characterArt, editCustomAppearance, defenseSpots, allPlots, plotCapacity, pairedPads, defenseCenter, defenseTypes, defenseStats, defenseOptions, improveDefense, guardPosts, guardPost, assignGuard, terrainAt, partyWalletCap, dispatchRescue, rescueGrace, fitWeek, prosthesisQuality, landmarks, landmarkPrice, buildLandmark, deathThreshold, debuffs, prosthesisBonus, treatDebuff, cureCost, limbCost, craftSupport, salePrice, canDetectTrap, luckyWeek, surveyDungeon, affinity, giftCost, canGift, giveGift, canMarry, marry, spouseOf, childStage, learnableSkills, yearLengths, setYearLength, calendarDate, species, entryTraining, weeksPerYear, ageYears, growthRate, abilityPower, spellDefense, inheritSpecies, welcomeChild, enlistChild, craftBonus, artisanName, guildStanding, seniorRank, guildGold, balance, bladeMultiplier, materialAvailable, expeditionFunds, supplyPower, outerPlots, territoryPlots, raidRoads, approaches, territoryRoads, raidRoute, roadNames, raidBeat, raidDefenders, raidPost, raidRecall, repairQuote, startRepair, rankName, rankLabel, partyQualifies, dungeonRank, examFocuses, examLines, examStatus, takeExam, fame, uniqueGuests, visitorList, scoutStatus, scout, offers, collectMarket,
     priorities, departureDelay, deathLimit, lossPenalty, knownPerson, currentHP, currentMP, maxMP, setPriority, morningPlans, holdDeparture, takeLeave, retire,
     gambitLimit, conditions, actions, actionList, targets, subjects, foes, setGambits, preset, conditionLabel, advanceTime, weekMillis, weekSpeeds, startingJobs, abilities, skillLimit, promotionLevel, resetCost, statGains, freePoints, spentPoints, allocate, resetAllocation, learnAbility, promote, deepest,
-    dungeons, dungeonOpen, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
+    dungeons, dungeonOpen, encounterKinds, tripRooms, nextRoom, shopTypes, shopRanks, effectNames, materialStock, skillStatus, learnSkill, resetSkills, recipeRequirement, deliverMaterial,
     orderQuote, placeOrder, wearOrder, outfittedStat, emergencyParty, maxParties, parties, partyNumber, anyAway, weekStarted, unlockCost, unlockParty, restore, reportFor, postedQuests, claimed, awayMember, plots, plotForSite, buildings, buildingCatalog, commercialBuildings, tourismReport, townPrice, build, townTotals, facilityTotals, facilityEffects, facilityEffectText, moraleMultiplier, jobs, traits, policies, items, quests, nodes, enemy, tones, initial, person, stat, recruit, hireCost,
     payroll, available, damage, speak, chatterLine, chatterRates, formalName, familiarName, nameLimits, setCharacterNames, setQuest, configure, hire, register, estimate, depart, step, choices, reply,
     returnHome, sell, donate, buy, equip, nextWeek, emblemShapes, emblemSymbols, emblemFrames, validEmblemImage, setProfile, maxTributeRate,

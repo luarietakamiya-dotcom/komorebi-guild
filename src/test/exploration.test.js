@@ -1515,3 +1515,18 @@ test("固定顔が残る一般隊長を移行し、名簿・手帳・伝書・�
   assert.equal(game.expeditionSprite(p.id),stack);
   assert.equal(game.reload().expeditionSprite(p.id),stack);
 });
+
+test("出発準備で行き先・方針を切り替えると階層別の出現情報と捕縛リスクも変わる", () => {
+  const state = Guild.initial();
+  state.history.push({dungeon:"moss",cleared:true,path:["gate","home"],log:[]});
+  const game = openGame(JSON.stringify(state));
+  game.click("prepare");
+  game.select("policy","bold");
+  assert.match(game.html("#dialog-body"),/晶角イノシシ<\/strong>（水晶の鉱脈）/);
+  game.select("dungeon","canal");
+  const form = game.html("#dialog-body");
+  assert.match(form,/ゴブリン<\/strong>（1階）.*全滅時は捕縛/);
+  assert.match(form,/水鏡ガメ<\/strong>（4階）/);
+  assert.match(form,/双月角の番獣<\/strong>（5階）/);
+  assert.doesNotMatch(form,/晶角イノシシ/);
+});

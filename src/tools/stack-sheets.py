@@ -14,7 +14,9 @@ GAME = Path(__file__).resolve().parents[1]
 SIZE = 32
 COLUMNS = 8
 LAYERS = dict(shusai=32, yuria=32, riina=32, yukina=32, jobava=32, tanaka=32, shiina=32, goto=32, meniya=32,
-              mina=32, shion=32, gald=32, toto=32, popo=32, boar=24)
+              mina=32, shion=32, gald=32, toto=32, popo=32, boar=24,
+              goblin=22, orc=30, bandit=32, shell=18, moth=24, crystal=28, warden=32, ram=32)
+MONSTER_SHEETS = {"goblin", "orc", "bandit", "shell", "moth", "crystal", "warden", "ram"}
 
 # Shadow, midtone and sunlit swatches sampled visually from the guild portraits.
 SWATCHES = {
@@ -431,7 +433,96 @@ def boar(v):
         flower(v,x,y,z)
 
 
+def goblin(v):
+    body(v, "hide", "moss")
+    v.oval((0, 1, 16), (6, 5, 5.8), "leaf")
+    for side in (-1, 1):
+        v.twig((side*4, 0, 17), (side*10, -1, 20), 2.3, .65, "moss")
+        v.oval((side*2.6, 5.2, 17.5), (1.2, 1, 1), "gold")
+    v.twig((7, 2, 9), (7, 5, 17), 1.4, .6, "iron")
+    v.oval((0, 5.7, 15.5), (2, 1.8, 1.4), "moss")
+
+
+def orc(v):
+    body(v, "leather", "sage")
+    v.oval((0, 0, 15), (8.5, 5.3, 7), "forest")
+    v.oval((0, 1, 23), (6.8, 5.5, 6.8), "sage")
+    v.oval((0, 4.8, 21), (5.4, 3.5, 3.6), "moss")
+    for side in (-1, 1):
+        v.oval((side*3, 5.5, 24), (1.2, 1, 1), "ink")
+        v.twig((side*3.5, 7, 20), (side*4.2, 7.9, 24), 1.3, .5, "linen")
+    v.oval((-7, 0, 17), (3.7, 5, 4), "iron")
+    v.twig((7, 3, 9), (10, 3, 23), 1.5, 3, "hide")
+
+
+def bandit(v):
+    body(v, "navy", "leather")
+    face(v, "ink", "ink")
+    hood(v, "red", "copper")
+    v.oval((0, 4.5, 20.4), (6, 3, 2.5), "navy")
+    v.twig((-7, 2, 9), (-8.5, 7, 17), 1.5, .6, "iron")
+
+
+def shell(v):
+    for side in (-1, 1):
+        for y in (-5, 5):
+            v.oval((side*6, y, 2.8), (3.4, 3.8, 3.3), "teal")
+    v.oval((0, 9, 6), (4.5, 5, 4), "sage")
+    for side in (-1, 1):
+        v.oval((side*3.2, 11.2, 7.4), (1.1, 1.2, 1), "ink")
+    v.oval((0, -1, 7), (9.3, 10.8, 8.7), "teal")
+    for x, y in [(0, 0), (-4.8, 3), (4.8, 3), (-4.8, -4), (4.8, -4)]:
+        v.oval((x, y-1, 12.5 if x else 15), (3.7, 4.2, 2.8), "iron")
+
+
+def moth(v):
+    for side in (-1, 1):
+        v.twig((side, 0, 7), (side*4, 3, .3), 1, .8, "ink")
+        v.oval((side*6, -1, 14), (5.5, 2.3, 8.3), "lilac", tilt=side*2)
+        v.oval((side*7.5, .8, 15.5), (2.5, 1.2, 3.4), "gold")
+        v.oval((side*5, -1.2, 8), (4.5, 2.3, 4), "plum")
+        v.twig((side, 2, 16), (side*4, 4, 22.8), 1, .9, "gold")
+    v.oval((0, 0, 10), (2.6, 2.7, 6.5), "plum")
+    v.oval((0, 2, 15), (3.4, 3, 3.3), "linen")
+    for side in (-1, 1):
+        v.oval((side*2, 4, 15.5), (1.4, 1.3, 1.6), "ink")
+
+
+def crystal(v):
+    boar(v)
+    for x, y, height in [(-3, -4, 24), (3, 0, 25), (0, 7, 27)]:
+        v.twig((x, y, 17), (x, y+2, height), 3, .8, "blue")
+
+
+def warden(v):
+    for side in (-1, 1):
+        for y in (-6, 5):
+            v.twig((side*4, y, 12), (side*5, y+1, 1), 2.8, 1.8, "navy")
+        v.twig((side*3, 6, 20), (side*10, 4, 25), 2.4, 1.6, "gold")
+        v.twig((side*10, 4, 25), (side*8, 3, 31), 1.7, .8, "linen")
+    v.oval((0, -2, 12), (7.5, 10, 7.5), "navy")
+    v.oval((0, 5, 16), (6.5, 5.5, 7.5), "lilac")
+    v.oval((0, 9, 18), (4.5, 4, 4.5), "navy")
+    for side in (-1, 1):
+        v.oval((side*3.6, 10.5, 19.8), (1.2, 1.3, 1.2), "gold")
+
+
+def ram(v):
+    for side in (-1, 1):
+        for y in (-7, 5):
+            v.twig((side*5, y, 13), (side*6, y, 1), 3.4, 2.3, "boots")
+    v.oval((0, -2, 13), (9.5, 11.5, 9.5), "copper")
+    v.oval((0, -3, 18), (8.8, 10, 6), "iron")
+    v.oval((0, 7, 16), (7.3, 6.6, 7), "leather")
+    for side in (-1, 1):
+        v.oval((side*4, 11.3, 17.8), (1.5, 1.2, 1.2), "gold")
+        v.twig((side*6, 5, 21), (side*9, 8, 23), 3, 2.6, "ochre")
+        v.twig((side*9, 8, 23), (side*8, 12, 19), 2.6, 1.4, "gold")
+    v.twig((0, 6, 21), (0, 11, 31), 4, .85, "iron")
+
+
 AUTHORS = dict(shusai=shusai, yuria=yuria, riina=riina, yukina=yukina, jobava=jobava, tanaka=tanaka,
+               goblin=goblin, orc=orc, bandit=bandit, shell=shell, moth=moth, crystal=crystal, warden=warden, ram=ram,
                shiina=shiina, goto=goto, meniya=meniya, mina=mina, shion=shion, gald=gald, toto=toto, popo=popo, boar=boar)
 
 
@@ -461,5 +552,9 @@ if __name__ == "__main__":
             volume = Volume(count, breadth=1.32 if name == "boar" else 1.15)
             AUTHORS[name](volume)
             volume.sheet().save(path)
-        split(name, path)
-        print(f"{name}: {count} layers")
+        if name in MONSTER_SHEETS:
+            with Image.open(path) as sheet:
+                sheet.save(GAME / "assets" / f"monster_{name}.webp", lossless=True, exact=True)
+        else:
+            split(name, path)
+        print(path)

@@ -80,11 +80,12 @@ const GuildScenery = (() => {
       targets.set(i,[sx,sy]);
       const size = e.boss ? .96 : .56;
       const bob = reduced ? 0 : Math.abs(Math.sin(Math.PI*fraction*4))*2;
-      fighter("boar",x,y,size,heading((bx-ax)/16,(by-ay)/8),{bob,tilt:e.hp ? 0 : -.8});
+      const kind = e.kind || (e.boss ? "warden" : "boar");
+      fighter(kind,x,y,size,heading((bx-ax)/16,(by-ay)/8),{bob,tilt:e.hp ? 0 : -.8});
       actors.push({depth:Infinity,paint(ctx) {
         ctx.fillStyle = "#392c2a"; ctx.fillRect(sx-13,sy+4,26,4);
         ctx.fillStyle = "#da7957"; ctx.fillRect(sx-12,sy+5,24*e.hp/e.maxHP,2);
-        if (e.boss) battleText(ctx,"ヌシ",sx,sy-40,"#ffe0a1");
+        if (e.boss) battleText(ctx,Guild.foes[kind].name,sx,sy-40,"#ffe0a1");
       }});
     }
     for (const hit of r.hits) {
@@ -118,10 +119,10 @@ const GuildScenery = (() => {
     const enemies = f?.enemies || [{id:impact?.target,kind:impact?.targetKind || (impact?.target === "caster" ? "crystal" : "boar"),hp:0}];
     for (const [i,e] of enemies.entries()) {
       if (!e.hp && e.id !== impact?.target) continue;
-      const slot = f ? i : Number(e.id === "caster");
+      const slot = f ? i : Number(e.id === "caster" || e.id === "flank");
       const u = start+3.1+slot*2.5;
-      positions.set(e.id,{sprite:Guild.foes[e.kind].sprite || "boar",u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
-        enemy:true,crystal:e.kind === "crystal",casting:e.casting});
+      positions.set(e.id,{sprite:e.kind,u,v:depth(start)+.7+slot*.55,hp:e.hp,max:Guild.foes[e.kind].hp,
+        enemy:true,boss:Guild.foes[e.kind].boss,casting:e.casting});
     }
     const target = positions.get(impact?.target);
     const ward = positions.get(impact?.protectedId);
@@ -137,15 +138,12 @@ const GuildScenery = (() => {
       const [x,y] = GuildVoxel.projectGround(u,v);
       const pose = {bob:attacking ? wave*4 : 0,tilt:p.carried ? -.87 : struck ? wave*.16 : 0};
       actors.push({id,x,headY:y-42-pose.bob,depth:v,paint(ctx) {
-        ctx.save();
-        if (p.crystal) ctx.filter = "hue-rotate(100deg)";
-        GuildStacks.draw(ctx,p.sprite,url,x,y,1.2,p.enemy ? -Math.PI/2 : Math.PI/2,pose);
-        ctx.restore();
+        GuildStacks.draw(ctx,p.sprite,url,x,y,p.boss ? 1.65 : 1.2,p.enemy ? -Math.PI/2 : Math.PI/2,pose);
         ctx.fillStyle = "#3b342f";
         ctx.fillRect(x-14,y+4,28,4);
         ctx.fillStyle = p.enemy ? "#bf5d49" : "#528660";
         ctx.fillRect(x-13,y+5,26*limit(p.hp/p.max),2);
-        if (p.casting) battleText(ctx,"詠唱",x,y-45,"#d6c3ff");
+        if (p.casting) battleText(ctx,"詠唱",x,y-(p.boss ? 60 : 45),"#d6c3ff");
       }});
     }
     for (const effect of effects) {

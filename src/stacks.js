@@ -7,23 +7,28 @@ const GuildStacks = (() => {
     jobava: ["ジョバヴァ", 32], tanaka: ["タナカ", 32], shiina: ["シイナ", 32], goto: ["ゴトウ", 32],
     meniya: ["メニーヤ", 32],
     mina: ["ミナ", 32], shion: ["シオン", 32], gald: ["ガルド", 32],
-    toto: ["トト", 32], popo: ["ポポ", 32], boar: ["苔イノシシ", 24]
+    toto: ["トト", 32], popo: ["ポポ", 32], boar: ["苔イノシシ", 24],
+    crystal:["晶角イノシシ",28], goblin:["ゴブリン",22], orc:["オーク",30], bandit:["盗賊団員",32],
+    shell:["水鏡ガメ",18], moth:["星粉ガ",24], warden:["双月角の番獣",32], ram:["鉄冠の破城獣",32]
   };
   const models = new Map();
+  const monsterSheets = new Set(["crystal","goblin","orc","bandit","shell","moth","warden","ram"]);
   const cell = 32, depth = .52;
   const pivot = 24, ground = 39;
 
   function model(id, url) {
     if (models.has(id)) return models.get(id);
-    const layers = Array.from({ length: characters[id]?.[1] ?? 32 }, (_, z) => {
+    const count = characters[id]?.[1] ?? 32;
+    const sheet = monsterSheets.has(id);
+    const layers = Array.from({ length: sheet ? 1 : count }, (_, z) => {
       const image = new Image();
-      image.src = url(`stack_${id}/${String(z).padStart(2, "0")}`);
+      image.src = url(sheet ? "monster_"+id : `stack_${id}/${String(z).padStart(2, "0")}`);
       return image;
     });
     const stamp = document.createElement("canvas");
     stamp.width = 2 * pivot;
     stamp.height = ground + 12;
-    const entry = { layers, stamp, ctx: stamp.getContext("2d"), angle: null };
+    const entry = { layers, count, sheet, stamp, ctx: stamp.getContext("2d"), angle: null };
     models.set(id, entry);
     return entry;
   }
@@ -65,9 +70,10 @@ const GuildStacks = (() => {
       ink.setTransform(1, 0, 0, 1, 0, 0);
       ink.clearRect(0, 0, m.stamp.width, m.stamp.height);
       ink.imageSmoothingEnabled = false;
-      for (let z = 0; z < m.layers.length; z++) {
+      for (let z = 0; z < m.count; z++) {
         projectLayer(ink, c, s, pivot, ground, z);
-        ink.drawImage(m.layers[z], -cell / 2, -cell / 2);
+        if (m.sheet) ink.drawImage(m.layers[0], z%8*cell, Math.floor(z/8)*cell, cell,cell, -cell/2,-cell/2,cell,cell);
+        else ink.drawImage(m.layers[z], -cell / 2, -cell / 2);
       }
       m.angle = angle;
     }

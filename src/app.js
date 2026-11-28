@@ -892,13 +892,18 @@ function raidDays() {
   const warning = state.raids.warning;
   return Math.max(1,7*((warning.dueWeek ?? state.week)-state.week) + Math.ceil(7*(warning.due-state.clock.elapsed)/g.weekMillis));
 }
+function raidScouting(warning) {
+  if (warning.routeVersion !== 2 || !warning.kinds) return "";
+  const kinds = [...new Set(warning.kinds)].filter(kind=>warning.observed || !g.foes[kind].boss);
+  return kinds.length ? "<p>目撃情報　"+kinds.map(kind=>g.foes[kind].name).join("・")+"。</p>" : "";
+}
 function raidBulletin() {
   const {warning,active} = state.raids;
-  if (warning) return `<section class="raid-bulletin">${title("mail",warning.observed ? "天文台の襲撃予報" : "斥候からの伝書")}<p>第${warning.dueWeek ?? state.week}週、<b class="raid-days">${raidDays()}</b>日後に${g.roadNames[warning.road]}から襲撃の兆し。${warning.observed ? `敵は${warning.count}体。ヌシ${warning.boss ? "あり" : "なし"}。` : `斥候の見立ては約${warning.count}体です。`}${warning.outer ? "立体地形図で" + g.defenseSpots.filter(p=>p.road===warning.road).map(p=>p.name).join("・") + "などの防衛専用地を選べます。" : ""}</p>${guardAssignments(warning)}<div class="actions">${teams().filter(team=>team.phase==="prep" && team.decisionWeek!==state.week && team.party.length).map(team=>action("hold",teamName(team)+"を町に残す","btn",`data-party="${g.partyNumber(state,team)}"`)).join("")}</div></section>`;
+  if (warning) return `<section class="raid-bulletin">${title("mail",warning.observed ? "天文台の襲撃予報" : "斥候からの伝書")}<p>第${warning.dueWeek ?? state.week}週、<b class="raid-days">${raidDays()}</b>日後に${g.roadNames[warning.road]}から襲撃の兆し。${warning.observed ? `敵は${warning.count}体。ヌシ${warning.boss ? "あり" : "なし"}。` : `斥候の見立ては約${warning.count}体です。`}${warning.outer ? "立体地形図で" + g.defenseSpots.filter(p=>p.road===warning.road).map(p=>p.name).join("・") + "などの防衛専用地を選べます。" : ""}</p>${raidScouting(warning)}${guardAssignments(warning)}<div class="actions">${teams().filter(team=>team.phase==="prep" && team.decisionWeek!==state.week && team.party.length).map(team=>action("hold",teamName(team)+"を町に残す","btn",`data-party="${g.partyNumber(state,team)}"`)).join("")}</div></section>`;
   if (!active) return "";
   const fallen = active.enemies.filter(e=>!e.hp).length;
   const defenders = g.raidDefenders(state);
-  return `<section class="raid-bulletin">${title("shield",g.roadNames[active.road]+(active.surprise ? "から奇襲" : "で迎撃中"))}<p>討伐 ${fallen} / ${active.count}体 ・ 町の守り手 ${defenders.map(p=>esc(p.name)).join("・") || "なし"}${active.knights ? " ・ 城の騎士団が参戦" : ""}${active.boss ? " ・ ヌシ出現" : ""}</p>${active.routeVersion===2 ? defenders.map((p,i)=>esc(p.name)+" → "+g.guardPosts[g.guardPost(active,p,i).key]).join(" ／ ") + raidContributions(active) : ""}<div class="actions">${teams().filter(t=>t.phase==="explore" && !t.trip.rescue).map(t=>action("raid-recall",teamName(t)+"を緊急帰還","btn",`data-id="${g.partyNumber(state,t)}"`)).join("")}</div></section>`;
+  return `<section class="raid-bulletin">${title("shield",g.roadNames[active.road]+(active.surprise ? "から奇襲" : "で迎撃中"))}<p>討伐 ${fallen} / ${active.count}体 ・ 町の守り手 ${defenders.map(p=>esc(p.name)).join("・") || "なし"}${active.knights ? " ・ 城の騎士団が参戦" : ""}${active.boss ? " ・ ヌシ出現" : ""}${active.kinds && active.routeVersion===2 ? " ／ "+[...new Set(active.kinds)].map(kind=>g.foes[kind].name).join("・") : ""}</p>${active.routeVersion===2 ? defenders.map((p,i)=>esc(p.name)+" → "+g.guardPosts[g.guardPost(active,p,i).key]).join(" ／ ") + raidContributions(active) : ""}<div class="actions">${teams().filter(t=>t.phase==="explore" && !t.trip.rescue).map(t=>action("raid-recall",teamName(t)+"を緊急帰還","btn",`data-id="${g.partyNumber(state,t)}"`)).join("")}</div></section>`;
 }
 function raidAftermath() {
   const jobs = Object.keys(state.town.repairs);
@@ -1116,7 +1121,7 @@ function logs(entries) {
   return `<ol class="logs">${entries.map(e=>`<li><small>${e.step}歩</small><span>${esc(e.message)}</span></li>`).join("")}</ol>`;
 }
 function combatNotes() {
-  return `<details class="rules"><summary>自動戦闘の計算と療養</summary><div class="enemy-info">${asset("boar")}<p><b>苔イノシシ</b><br>HP13 ／ 攻31 ／ 防4 ／ 速10</p></div><p>速の高い順に行動。敵は残HPが最も低い仲間を狙います。同値は編成順です。ダメージ＝max(1, ⌊攻×武器倍率−相手の防×0.5⌋)。10ラウンドで未決着なら帰還します。</p><p>技や手当てはMPを2消費。HPが0になるたび死亡回数が増え、${g.deathThreshold(state)}回目で永久消失します。重度の捻挫は2週間、骨折は4週間で復帰します。錬金術師の店があると骨折は3週間に短縮されます。宿屋と食べ物屋は週ごとの回復を助けます。</p></details>`;
+  return `<details class="rules"><summary>自動戦闘の計算と療養</summary><div class="enemy-info">${asset("boar")}<p><b>苔イノシシ</b><br>HP13 ／ 攻31 ／ 防4 ／ 速10</p></div><p>速の高い順に行動。苔イノシシは残HPが最も低い仲間を狙います。同値は編成順です。ダメージ＝max(1, ⌊攻×武器倍率−相手の防×0.5⌋)。10ラウンドで未決着なら帰還します。</p><p>技や手当てはMPを2消費。HPが0になるたび死亡回数が増え、${g.deathThreshold(state)}回目で永久消失します。重度の捻挫は2週間、骨折は4週間で復帰します。錬金術師の店があると骨折は3週間に短縮されます。宿屋と食べ物屋は週ごとの回復を助けます。</p></details>`;
 }
 function tripProgress(t) {
   return `${mapView(t)}<div class="location">${tag(t.steps+" 歩","mint")}<b>${g.tripRooms(t)[t.node].name}</b></div>
@@ -1419,6 +1424,21 @@ function drawModal() {
   if(modal==="help") body.innerHTML=modalHead("book","遊び方") + weekSpeedControl() + chatterControl() + `<ol class="help-list"><li><b>週の初めに仕事を選ぶ</b><p>リーダーが週初めの伝書で行き先を知らせ、標準で12秒の支度を終えると出発します。ホールで隊ごとの優先条件を選べます。手動で依頼や編成を決めたい週は、伝書の「今週の自動判断を止める」を押してください。</p></li><li><b>遠征パーティーを送り出す</b><p>出発準備で1〜3人とリーダーを選択。体調が悪いとリーダーは休暇を取り、プレイヤーもホールから休暇を指示できます。安全第一は戦闘を避け、素材優先では性格が分岐の決め方に影響します。</p></li><li><b>探索と通信を見守る</b><p>出発すると、仲間は約2秒に1歩進み、採集も戦闘も自分たちで行います。全員の動きと相談の期限を止めるには「全体を一時停止」を選びます。標準では、ゲームを表示している実時間4分で翌週になります。遠征パーティーの「戦術オーダー」から、手番で優先する条件・対象・行動を編集できます。隊だけを止めるには「隊を一時停止」、早く見届けるには速度を×2に。分岐の相談は伝書箱に届き、送信した隊が返事を待ちます。仲間が倒れたときは緊急通信が割り込み、全隊が待機します。通常・緊急ともに翌週が返信期限です。「返信せず翌週へ」で週を進めると、未返信の相談は各隊のリーダーが判断します。早めに切り上げたいときは「帰還する」を選びましょう。</p></li><li><b>成果を翌週へ</b><p>帰還時に自動納品・精算。余った素材はギルド倉庫に入り、売却や工房の研究に使えます。隊は運転資金を残して装備を購入し、残った余剰金をギルド金庫へ戻します。週を締めると翌週です。</p></li></ol>${combatNotes()}<p class="fine">探索の歩みと操作はそのつど保存されます。開き直すと、速度や一時停止、返信待ちも復元されます。</p>${action("close","手帳を閉じる","primary wide")}`;
   if(modal==="work") body.innerHTML=modalHead("sun","今週は休養する")+`<p>遠征を休み、町の手伝いをして翌週を迎えます。週給支給後の収入は＋30G。受注前なので信用は変わりません。</p><div class="actions">${action("do-work","町を手伝い、週を締める","primary")}${action("close","戻る","btn")}</div>`;
 }
+function dungeonScouting(dungeon,policy) {
+  const sites = new Map();
+  for (const [id,room] of Object.entries(g.dungeons[dungeon].rooms)) {
+    if (room.event !== "fight") continue;
+    for (const kind of new Set(g.encounterKinds(dungeon,id,policy))) {
+      if (!sites.has(kind)) sites.set(kind,[]);
+      sites.get(kind).push(dungeon === "moss" ? room.name : room.depth+"階");
+    }
+  }
+  const rows = Array.from(sites,([kind,rooms]) => {
+    const foe = g.foes[kind];
+    return `<li><strong>${foe.boss ? "主 ・ " : ""}${foe.name}</strong>（${rooms.join("・")}）<br>${foe.note}${foe.captor ? " 全滅時は捕縛。" : ""}</li>`;
+  });
+  return `<details class="rules"><summary>出現情報 ・ ${g.dungeons[dungeon].name}</summary><ul>${rows.join("")}</ul></details>`;
+}
 function prepForm() {
   const q=g.quests[selected().quest], quote=g.estimate(state,{...selected(),...draft});
   const canDepart = !state.town.repairs.hall && g.partyQualifies(state,draft.party,q.rank) && g.partyQualifies(state,draft.party,g.dungeonRank(draft.dungeon));
@@ -1430,6 +1450,7 @@ function prepForm() {
     <div class="form-title"><b>遠征メンバー</b><small>${draft.party.length} / 3 人</small></div>
     <div class="pick-list">${state.roster.map(p=>`<label class="pick ${draft.party.includes(p.id)?"picked":""}"><input type="checkbox" data-pick="${p.id}" ${draft.party.includes(p.id)?"checked":""} ${g.available(state,p)&&!g.awayMember(state,p.id)?"":"disabled"}>${portrait(p)}<span><b>${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${g.traits[p.trait]} ・ ${esc(g.rankName(state,p))}${assignmentHint(p)}</small></span></label>`).join("")}</div>
     <label>行き先<select id="dungeon">${destinations}</select></label><small>依頼の必要階級：${esc(g.rankLabel(state,q.rank))}以上。隊員全員が条件を満たすと出発できます。</small>
+    ${dungeonScouting(draft.dungeon,draft.policy)}
     ${state.town.landmark === "academy" ? `<p><b>学院の古地図</b>　最初の分岐の先は${g.surveyDungeon(state,draft.dungeon).join(" ／ ")}。</p>` : ""}
     <div class="form-pair"><label>リーダー<select id="leader">${draft.party.map(id=>`<option value="${id}" ${draft.leader===id?"selected":""}>${esc(who(id).name)}</option>`).join("")}</select></label><label>探索方針<select id="policy">${Object.entries(g.policies).map(([id,name])=>`<option value="${id}" ${draft.policy===id?"selected":""}>${name}</option>`).join("")}</select></label></div>
     <p class="fine">${draft.policy==="safe"?"安全第一は採集路へ。薬草が主な収穫で、鉱石は1個です。":"素材優先では両路が候補。大胆は近道へ進み、他の性格は判断を仰ぎます。"}</p>
