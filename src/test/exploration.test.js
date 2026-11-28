@@ -1623,3 +1623,37 @@ test("別隊の偵察報告が到着した時点で、開いている出発準�
   game.click("nav","mail");
   assert.match(game.html("#screen"),/シオンが偵察中に獣の足跡/);
 });
+
+test("店の詳細から一覧に戻ると一覧の位置を復元し、さらに元の町へ戻る", () => {
+  const game = openGame();
+  game.click("nav","shops");
+  game.element("#management").scrollTop = 120;
+  game.click("open-shop","hall");
+  game.click("shop-view","tree");
+  game.click("nav","mail");
+  game.escape();
+  assert.match(game.html("#screen"), /data-id="tree" aria-pressed="true"/);
+  game.clickDrawerClose();
+  assert.match(game.html("#screen"), /id="management" aria-label="町のショップ"/);
+  assert.equal(game.element("#management").scrollTop,120);
+  game.escape();
+  assert.match(game.html("#screen"), /id="management"[^>]* hidden>/);
+});
+
+test("人物手帳の子画面は戻る操作とEscで手帳の同じ位置に戻る", () => {
+  const game = openGame();
+  game.click("nav","roster");
+  game.click("character","mina");
+  for (const child of ["gambits","retirement"]) {
+    game.element("#dialog").scrollTop = 250;
+    game.click(child,"mina");
+    assert.match(game.html("#dialog-body"), /data-action="dialog-back"/);
+    if (child === "gambits") game.click("dialog-back");
+    else game.escape();
+    assert.match(game.html("#dialog-body"), /の人物手帳/);
+    assert.equal(game.element("#dialog").scrollTop,250);
+  }
+  game.escape();
+  assert.equal(game.element("#dialog").open,false);
+  assert.match(game.html("#screen"), /id="management" aria-label="冒険者名簿"/);
+});

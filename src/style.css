@@ -7,6 +7,9 @@
   --line: #dfddcf;
   --cream: #faf8f0;
   --paper: #fffef8;
+  --panel-pad: clamp(14px, 2vw, 20px);
+  --panel-gap: 14px;
+  --panel-radius: 12px;
   --serif: "Yu Mincho","Hiragino Mincho ProN","Noto Serif CJK JP",serif;
   --sans: "Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,"Noto Sans CJK JP",sans-serif;
   font-family: var(--sans);
@@ -53,11 +56,9 @@ nav {display:grid;gap:6px}
 .master strong {font-size:12px}.master small {font-size:10px;color:var(--muted);margin-top:2px}
 main {margin-left:208px;min-height:100vh;outline:0}
 #top {height:64px;background:#fcfaf3;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 clamp(20px,2.6vw,44px);gap:14px}
-.journal,.balances,.date,.balance,.section-title,.panel-heading,.phase-pill,.tag,.name-line,.policy-line,.policy-line span,.small-kicker,.hero-kicker,.quest-meta span,.quest-meta b,.panel-heading h2,.section-title h2,.modal-head h2,.actions,.btn,.primary,.text-btn,.icon-btn {display:flex;align-items:center}
+.section-title,.panel-heading,.phase-pill,.tag,.name-line,.policy-line,.policy-line span,.small-kicker,.hero-kicker,.quest-meta span,.quest-meta b,.panel-heading h2,.section-title h2,.modal-head h2,.actions,.btn,.primary,.text-btn,.icon-btn {display:flex;align-items:center}
 .journal {gap:10px;font-size:12px;color:#797c6c}.journal .icon {color:#768471}.journal span {color:#c2c1b0}.journal b {font-weight:600;color:#4d5f4b}
-.balances {gap:12px}.date,.balance {gap:7px;border:1px solid #dddcca;border-radius:18px;padding:5px 13px;background:#fffef8;font-weight:700;font-size:13px}
-.date .icon {color:#ac8138}.date i {width:1px;height:12px;background:#dedac8}
-.balance {background:#fbf2d9;color:#84632d;border-color:#e5d6ac;font:700 17px Georgia,serif}.balance small {font:600 12px Georgia,serif}.balance .icon,.quest-meta b .icon {fill:#f3cf72;color:#ac7d2f}
+.quest-meta b .icon {fill:#f3cf72;color:#ac7d2f}
 #screen {max-width:1590px;margin:0 auto;padding:24px clamp(20px,2.6vw,44px) 42px}
 .hero {isolation:isolate;position:relative;overflow:hidden;background:#f7edce center 51%/cover no-repeat;border:1px solid #cbbd98;border-radius:14px;min-height:214px;display:flex;align-items:center;box-shadow:0 3px 0 #e9e3d3}
 .hero:before {content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(250,244,219,.92),rgba(253,247,222,.86) 21%,rgba(254,246,216,.52) 41%,transparent 59%);z-index:-1}
@@ -66,7 +67,7 @@ main {margin-left:208px;min-height:100vh;outline:0}
 .hero-kicker {font:700 11px Georgia,serif;letter-spacing:.19em;color:#6b7054;gap:9px}
 .hero-kicker i {height:1px;width:23px;background:#9a9977;position:relative}.hero-kicker i:after {content:"";position:absolute;right:0;top:-2px;width:5px;height:5px;background:#94936c;transform:rotate(45deg)}
 .hero-kicker i:last-child:after {left:0}
-.hero h1,.page-title h1 {font-size:clamp(36px,3.3vw,53px);letter-spacing:.035em;line-height:1.35;margin:7px 0;color:#304c37}
+.hero h1 {font-size:clamp(36px,3.3vw,53px);letter-spacing:.035em;line-height:1.35;margin:7px 0;color:#304c37}
 .hero-copy p {font:600 13px/1.8 var(--sans);color:#4e5b43;max-width:420px}
 .phase-pill {display:inline-flex;gap:7px;background:#fffbea;border:1px solid #d6cfb0;color:#5f6e4e;border-radius:16px;font-size:11px;font-weight:700;padding:3px 11px;margin-top:14px}
 .phase-pill i {width:7px;height:7px;border-radius:50%;background:#79a16d}
@@ -128,7 +129,7 @@ main {margin-left:208px;min-height:100vh;outline:0}
 .small-kicker {color:#8e7750;gap:5px;letter-spacing:.07em}
 .town-copy h3 {font-size:18px;margin:2px 0}.town-copy p {font-size:12px;color:#74694f}.town-copy .text-btn {margin-top:5px}
 .metrics-panel {padding:15px 17px}.metric-mini {display:flex}.metric-mini div {flex:1;text-align:center;border-left:1px solid #e7e4d7}.metric-mini div:first-child {border:0}.metric-mini small {display:block;font-size:10px}.metric-mini b {display:block;font:700 20px Georgia,serif;color:#61755b;margin-top:5px}
-.page-title {margin:12px 0 25px;border-bottom:1px solid var(--line);padding-bottom:22px}.page-title .small-kicker {font:700 11px Georgia,serif;letter-spacing:.16em;color:#81876b}.page-title h1 {font-size:37px}.page-title p,.fine,.muted {color:var(--muted)}
+.fine,.muted {color:var(--muted)}
 .roster-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}
 .roster-card {display:flex;align-items:center;flex-direction:column;padding:17px 14px}.roster-card>.tag {align-self:flex-start}.roster-card>.avatar {width:110px;height:110px;margin:12px 0}.roster-card p {font-size:12px;text-align:center}.roster-card .fine {min-height:45px;margin:12px 0}.roster-card .btn {margin-top:auto}
 .character-stats {display:flex;gap:10px;border-block:1px dashed var(--line);width:100%;justify-content:center;padding:10px 0;margin-top:12px;font-size:11px}.character-stats b {color:var(--ink)}
@@ -191,7 +192,7 @@ select,input:not([type=checkbox]) {border:1px solid #cfcebd;border-radius:6px;pa
 @media(min-width:1550px){.hero{min-height:260px}.dashboard{gap:27px}.quest{grid-template-columns:89px 1fr;padding:18px 20px 0}.item-art{width:89px;height:89px}.party-row{padding:14px 0}}
 @media(max-width:1150px) and (min-width:801px){#sidebar{width:176px;padding-inline:10px}.brand strong{font-size:17px}.brand{gap:6px}.crest{width:32px}.nav-btn{font-size:13px;padding-inline:11px}main{margin-left:176px}.dashboard{grid-template-columns:minmax(0,1.38fr) minmax(250px,1fr);gap:15px}.quest{grid-template-columns:59px 1fr;gap:0 12px;padding:13px 12px 0}.item-art{width:59px;height:63px}.quest-meta{gap:7px;font-size:10px}.quest-meta span .icon{width:12px}.party-members,.party-bottom{margin-inline:0;padding-inline:13px}.hero-copy{padding-left:25px}.section-title h2{font-size:20px}.town-panel{gap:12px;padding-inline:12px}.toto-art{width:76px}.panel-heading{padding-inline:13px}}
 @media(max-width:800px){#sidebar{position:static;width:100%;padding:12px 16px 7px;border-right:0;border-bottom:1px solid var(--line)}.brand{margin:0 0 10px;align-self:center}.brand strong{font-size:19px}.brand small{font-size:8px}.crest{width:29px;height:36px}.side-foot,.nav-label{display:none}nav{display:flex;justify-content:center;gap:5px}.nav-btn{width:auto;font-size:12px;padding:7px 12px;gap:6px}.nav-btn.active{box-shadow:none}.nav-btn .icon{width:16px}main{margin:0}#top{height:46px}#screen{padding:15px 18px 30px}.dashboard{gap:14px;grid-template-columns:minmax(0,1.35fr) minmax(230px,1fr)}.hero{min-height:185px}.hero-copy{padding:20px}.quest{grid-template-columns:55px 1fr;gap:0 9px;padding:12px 10px 0}.item-art{width:55px;height:60px}.quest-meta{gap:7px;font-size:10px}.quest-meta span .icon{display:none}.party-members{padding:0 12px}.party-bottom{margin-inline:12px}.panel-heading{padding:12px}.panel-heading h2{font-size:17px}.town-panel{padding:10px}.toto-art{width:63px}.quest-desc{font-size:11px}}
-@media(max-width:640px){#sidebar{padding-inline:7px}.nav-btn{flex:1;justify-content:center;padding:7px 3px;font-size:11px;gap:4px}.nav-btn .icon{width:15px}.brand{margin-bottom:7px}.journal{font-size:10px;gap:5px}.journal .icon{width:14px}#top{padding:0 13px}.balances{gap:5px}.date,.balance{padding:4px 7px;gap:4px;font-size:12px}.date .icon,.balance .icon{width:15px}#screen{padding:12px 12px 28px}.hero{min-height:161px;background-position:61% center}.hero:before{background:linear-gradient(90deg,#f9f2d9ed 0%,#f9f2d9bb 42%,transparent 79%)}.hero-copy{padding:16px}.hero-kicker{font-size:9px}.hero h1{font-size:33px}.hero-copy p{font-size:11px;max-width:213px}.phase-pill{margin-top:7px;font-size:10px}.dashboard{display:flex;flex-direction:column;gap:14px;margin-top:17px}.left-col,.right-col{display:contents}.dashboard>* ,.left-col>*,.right-col>*{width:100%}.party-panel{order:1}.town-panel{order:2}.metrics-panel{order:3}.section-title h2{font-size:20px}.quest{grid-template-columns:62px 1fr;padding:12px 13px 0;gap:0 12px}.item-art{width:62px;height:62px}.quest-meta{gap:12px}.quest-meta span .icon{display:inline-block;width:12px}.quest strong{font-size:18px}.quest-meta b{font-size:16px}.split{grid-template-columns:1fr}.hero+.dashboard .right-col .padded{order:2}.roster-grid{grid-template-columns:1fr 1fr;gap:8px}.roster-card{padding:10px 7px}.roster-card>.avatar{width:80px;height:80px}.character-stats{gap:5px;font-size:10px}.page-title h1{font-size:30px}.forge-intro{gap:10px;padding:10px}.smith{width:78px}.forge-intro p{font-size:12px}.close-day{display:grid}.padded,.comms,.dialog-inner{padding:15px}.pick-list{grid-template-columns:1fr 1fr}.receipt p,.party-row{font-size:12px}.town-panel{gap:15px}.toto-art{width:80px}.report-wrap .split{margin:12px 0}.journal b{font-size:10px}}
+@media(max-width:640px){#sidebar{padding-inline:7px}.nav-btn{flex:1;justify-content:center;padding:7px 3px;font-size:11px;gap:4px}.nav-btn .icon{width:15px}.brand{margin-bottom:7px}.journal{font-size:10px;gap:5px}.journal .icon{width:14px}#top{padding:0 13px}.balances{gap:5px}#screen{padding:12px 12px 28px}.hero{min-height:161px;background-position:61% center}.hero:before{background:linear-gradient(90deg,#f9f2d9ed 0%,#f9f2d9bb 42%,transparent 79%)}.hero-copy{padding:16px}.hero-kicker{font-size:9px}.hero h1{font-size:33px}.hero-copy p{font-size:11px;max-width:213px}.phase-pill{margin-top:7px;font-size:10px}.dashboard{display:flex;flex-direction:column;gap:14px;margin-top:17px}.left-col,.right-col{display:contents}.dashboard>* ,.left-col>*,.right-col>*{width:100%}.party-panel{order:1}.town-panel{order:2}.metrics-panel{order:3}.section-title h2{font-size:20px}.quest{grid-template-columns:62px 1fr;padding:12px 13px 0;gap:0 12px}.item-art{width:62px;height:62px}.quest-meta{gap:12px}.quest-meta span .icon{display:inline-block;width:12px}.quest strong{font-size:18px}.quest-meta b{font-size:16px}.split{grid-template-columns:1fr}.hero+.dashboard .right-col .padded{order:2}.roster-grid{grid-template-columns:1fr 1fr;gap:8px}.roster-card{padding:10px 7px}.roster-card>.avatar{width:80px;height:80px}.character-stats{gap:5px;font-size:10px}.forge-intro{gap:10px;padding:10px}.smith{width:78px}.forge-intro p{font-size:12px}.close-day{display:grid}.padded,.comms,.dialog-inner{padding:15px}.pick-list{grid-template-columns:1fr 1fr}.receipt p,.party-row{font-size:12px}.town-panel{gap:15px}.toto-art{width:80px}.report-wrap .split{margin:12px 0}.journal b{font-size:10px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important;animation:none!important}}
 .mobile-help {display:none}.roster-link {margin:8px auto 0;font-size:11px}
 @media(max-width:800px){.mobile-help{display:flex;width:26px;height:26px}}
@@ -280,7 +281,6 @@ select,input:not([type=checkbox]) {border:1px solid #cfcebd;border-radius:6px;pa
 
 /* The town stays mounted under the management drawer. */
 body:not(.stack-demo) #content {margin:0 auto;max-width:1680px;padding:0 clamp(12px,3vw,46px) 96px}
-body:not(.stack-demo) #top {height:85px;padding:0;border:0;background:transparent}
 .village-title {display:flex;align-items:center;gap:12px}
 .village-title .crest {background:#456449;height:43px;width:34px}
 .village-title small {display:block;color:#66705b;font-size:10px;font-weight:700;letter-spacing:.2em}
@@ -313,7 +313,6 @@ body:not(.stack-demo) #screen {position:relative;padding:0;max-width:none}
 }
 @media(max-width:640px){
   body:not(.stack-demo) #content {padding:0 8px 86px}
-  body:not(.stack-demo) #top {height:67px;padding:0 4px}
   .village-title {gap:7px}.village-title .crest {width:25px;height:33px}
   .village-title small {font-size:9px}
   #sidebar {bottom:max(8px,env(safe-area-inset-bottom));width:calc(100% - 16px);border-radius:11px}
@@ -419,9 +418,7 @@ body:not(.stack-demo) #screen {position:relative;padding:0;max-width:none}
 .battle-readout b {color:#405542}
 #world-time {font-variant-numeric:tabular-nums}
 @media(max-width:640px){
- body:not(.stack-demo) #top {height:auto;min-height:67px;flex-wrap:wrap;padding-block:8px}
- .balances {flex-wrap:wrap}
- .balances [data-action="world-pause"] {padding:4px 7px;font-size:12px}
+ .top-actions [data-action="world-pause"] {padding:4px 8px;font-size:13px}
 }
 
 .guest-board { margin-block: 1rem; }
@@ -468,3 +465,115 @@ body:not(.stack-demo) #screen {position:relative;padding:0;max-width:none}
 .appearance-preview canvas {width:96px;height:75px;image-rendering:pixelated}
 .appearance-preview p {margin:4px 0}
 .mail-face, .resident-portrait {width:36px;height:36px;vertical-align:middle;margin-right:8px}
+
+/* The village header and navigation stay in the same place across the handbook. */
+body:not(.stack-demo) #top {
+  position:sticky; top:0; z-index:3;
+  display:grid; grid-template-columns:minmax(0,1fr) auto auto;
+  gap:6px clamp(12px,2vw,28px); height:auto; padding:10px 0;
+  border-bottom:1px solid var(--line); background:var(--cream);
+}
+.village-title small {font-size:12px; letter-spacing:.05em}
+.top-actions,.balances {display:flex; align-items:center; gap:8px}
+.balances {
+  align-items:stretch; gap:0; padding:7px 0;
+  border:1px solid var(--line); border-radius:10px; background:var(--paper);
+}
+.status-cell {display:grid; align-content:center; padding:0 14px; font-variant-numeric:tabular-nums}
+.status-cell + .status-cell {border-left:1px solid var(--line)}
+.status-cell > small {display:flex; align-items:center; gap:4px; color:#626c58; font-size:12px}
+.status-cell > b {color:var(--ink); font-size:16px; line-height:1.4}
+.status-cell #world-time {font-size:12px; color:#626c58}
+.raid-link {grid-column:1/-1; justify-self:start; color:#8a4c31}
+body:not(.stack-demo) #screen {margin-top:var(--panel-gap)}
+.nav-short {display:none}
+.nav-btn {position:relative; justify-content:center; min-height:44px}
+.nav-count {
+  display:grid; place-items:center; min-width:18px; padding:0 4px; border-radius:12px;
+  background:#f6dfa0; color:#453b28; font-size:12px; font-variant-numeric:tabular-nums;
+}
+.drawer-body,.town-overview,.shop-panel {display:grid; grid-template-columns:minmax(0,1fr); gap:var(--panel-gap)}
+.drawer-body > *, .town-overview > * {min-width:0; margin-block:0}
+.drawer-body,.dialog-inner,.team-board,.guild-charter,.padded,.comms,.archive,.shop-training {padding:var(--panel-pad)}
+.panel,.team-board,.guild-charter,.shop-training,.comms {border-radius:var(--panel-radius)}
+.shop-training {border:1px solid var(--line); background:var(--paper)}
+.drawer-bar,.modal-head {
+  position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:10px;
+  padding:6px var(--panel-pad); color:var(--ink); background:#edf1e4; border-bottom:1px solid #ced5bf;
+}
+.drawer-bar h2,.modal-head h2,.section-title h2,.panel-heading h2,.team-board h2 {font-size:clamp(17px,2vw,21px); line-height:1.45}
+.modal-head {margin:calc(-1 * var(--panel-pad)) calc(-1 * var(--panel-pad)) var(--panel-pad)}
+.drawer-bar button,.modal-head button {margin-left:auto; flex:none}
+.btn.back-btn {gap:5px}
+.back-btn .icon {transform:rotate(180deg)}
+.pane-intro {color:#626c58; line-height:1.65}
+.section-title,.panel-heading {flex-wrap:wrap}
+.tag,.caption,.name-line .tag {font-size:12px; line-height:1.5; border-radius:6px}
+.tag {max-width:100%; white-space:normal}
+.icon-btn {width:44px; height:44px; flex-shrink:0}
+#management {scroll-padding-top:64px}
+#dialog {scroll-padding-top:72px}
+.town-ledger {grid-template-columns:repeat(3,minmax(0,1fr)); row-gap:12px}
+.town-ledger div:nth-child(3n+1) {border-left:0}
+.pane-intro + .section-title {margin-bottom:0}
+#toast {bottom:calc(80px + env(safe-area-inset-bottom))}
+@media (max-width:850px) {
+  #sidebar .nav-btn {padding-inline:10px}
+  .status-cell {padding-inline:9px}
+}
+@media (max-width:700px) {
+  :root {--panel-gap:10px; --panel-pad:14px}
+  body:not(.stack-demo) #content {padding:0 8px calc(78px + env(safe-area-inset-bottom))}
+  body:not(.stack-demo) #top {
+    grid-template-columns:minmax(0,1fr) auto; gap:4px 8px; padding:4px 0 6px;
+  }
+  .village-title {gap:6px}
+  .village-title h1 {font-size:20px}
+  .village-title small {letter-spacing:0}
+  .top-actions {grid-column:2; grid-row:1; gap:4px}
+  .balances {grid-column:1/-1; grid-row:2; display:grid; grid-template-columns:auto 1fr auto; padding:5px 0}
+  .status-cell {gap:1px; padding:0 8px}
+  .status-cell > small {font-size:12px}
+  .status-cell > b {font-size:15px}
+  .status-cell:first-child {grid-template-columns:auto auto; align-content:center; column-gap:6px}
+  .status-cell:first-child > small {grid-row:1; grid-column:1}
+  .status-cell:first-child > b {grid-column:1/-1; grid-row:2}
+  .status-cell #world-time {grid-row:1; grid-column:2; align-self:center; white-space:nowrap}
+  .status-cell > small .icon {width:13px}
+  #sidebar {width:calc(100% - 16px); bottom:max(6px,env(safe-area-inset-bottom)); padding:3px}
+  #sidebar nav {display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:0}
+  #sidebar .nav-btn {width:100%; min-width:0; min-height:48px; flex-direction:column; padding:3px 0; gap:2px; font-size:12px}
+  #sidebar .nav-btn .icon {width:18px; height:18px}
+  .nav-full {display:none}
+  .nav-short {display:inline}
+  .nav-count {position:absolute; right:0; top:0}
+  .btn,.primary,.text-btn,.scene-caption button,select,input:not([type=checkbox]):not([type=radio]):not([type=color]),summary {min-height:44px}
+  .text-btn,.scene-caption button,.rule-head .btn {font-size:13px}
+  summary {align-content:center; padding-block:8px}
+  select,input:not([type=checkbox]):not([type=radio]),textarea {font-size:16px}
+  .town-zoom .btn,.town-turns .btn {min-width:44px}
+  .town-view-controls {justify-content:space-between; padding:6px; gap:4px}
+  .town-turns {margin-left:0}
+  .town-ledger {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .town-ledger div:nth-child(n) {border-left:1px solid var(--line)}
+  .town-ledger div:nth-child(odd) {border-left:0}
+  body:not(.stack-demo) #content:has(#management:not([hidden])) {display:flex; flex-direction:column; height:100dvh; padding-bottom:calc(67px + env(safe-area-inset-bottom))}
+  #content:has(#management:not([hidden])) #screen {display:flex; flex-direction:column; flex:1; min-height:0; margin-top:6px}
+  #screen:has(#management:not([hidden])) .town-overview {display:none}
+  #management:not([hidden]) {position:relative; inset:auto; width:100%; max-height:none; min-height:0; flex:1; box-shadow:none}
+  .drawer-bar {padding-block:3px}
+  .drawer-body .fine,.roster-card p,.rules,.quest-desc {font-size:13px}
+  .roster-grid {grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr))}
+  .section-title .actions,.morning-orders > label,.form-pair label {min-width:0}
+  .team-card {width:100%}
+  .rule-head,.rule-intro {flex-wrap:wrap}
+  .rule-intro p {flex-basis:100%}
+  .panel .return-row,.scene-caption .actions {flex-wrap:wrap}
+}
+@media (max-width:370px) {
+  .status-cell {padding-inline:5px}
+  .status-cell:first-child {column-gap:3px}
+  .top-actions .btn {padding-inline:8px}
+  .guild-charter,.form-pair,.catalog-group>div {grid-template-columns:minmax(0,1fr)}
+  .guild-charter .btn {justify-self:start}
+}

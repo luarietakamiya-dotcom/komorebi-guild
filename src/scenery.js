@@ -489,7 +489,12 @@ const GuildScenery = (() => {
     }
     let frame, active = true;
     function paint(now) {
-      const screenScale = Math.min(window.devicePixelRatio || 1, 2) * canvas.clientWidth / width;
+      const visibleWidth = canvas.clientWidth;
+      if (!visibleWidth) {
+        frame = requestAnimationFrame(paint);
+        return;
+      }
+      const screenScale = Math.min(window.devicePixelRatio || 1, 2) * visibleWidth / width;
       // Bound the zoomed town bitmap on high-density displays.
       const scale = isTown ? Math.min(screenScale,2*Math.max(1,viewport.clientWidth/width)) : screenScale;
       const pixels = Math.max(1,Math.round(width*scale)), rows = Math.max(1,Math.round(height*scale));

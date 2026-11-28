@@ -84,10 +84,18 @@ function hallLabel() {
   if (selected().phase === "explore") return selected().trip.pending ? "通信に返信" : "遠征を見守る";
   return selected().phase === "report" ? "帰還報告" : "ギルドホール";
 }
+let lastNav = "";
+const shortNav = {town:"町", hall:"ホール", roster:"名簿", shops:"ショップ", mail:"伝書箱", history:"記録"};
 function sidebar() {
-  $("#sidebar").innerHTML = `<nav aria-label="ギルド運営">${Object.entries(panes).map(([id,[sym,name]]) =>
-    action("nav",`${icon(sym,20)}<span>${name}${id === "mail" && waitingLetters().length ? " ("+waitingLetters().length+")" : ""}</span>`,"nav-btn"+(id===page?" active":""),
-      `data-id="${id}" ${id===page?'aria-current="page"':""}`)).join("")}</nav>`;
+  const count = waitingLetters().length;
+  const key = page + "/" + count;
+  if (lastNav === key) return;
+  lastNav = key;
+  $("#sidebar").innerHTML = `<nav aria-label="ギルド運営">${Object.entries(panes).map(([id,[sym,name]]) => {
+    const unread = id === "mail" && count;
+    return action("nav",`${icon(sym,20)}<span class="nav-full">${name}</span><span class="nav-short">${shortNav[id]}</span>${unread ? `<small class="nav-count">${count}</small>` : ""}`,
+      "nav-btn"+(id===page?" active":""), `data-id="${id}" ${id===page?'aria-current="page"':""} aria-label="${name}${unread ? "、返信待ち"+count+"件" : ""}"`);
+  }).join("")}</nav>`;
 }
 function clockText() {
   const seconds = Math.ceil((g.weekMillis - state.clock.elapsed) / (1000 * state.clock.speed));
@@ -110,8 +118,12 @@ function worldPauseButton() {
 function topbar() {
   const profile = state.guildProfile;
   document.title = profile.name + " ｜ ギルド運営手帳";
-  $("#top").innerHTML = `<div class="village-title">${drawEmblem(profile.emblem)}<div><small>${esc(profile.name)} ・ ギルドランク${g.guildStanding(state).grade}</small><h1>木もれびの里</h1>${state.raids.active || state.raids.warning ? action("nav",state.raids.active ? "襲撃中 ・ 町を見守る" : "襲撃予告 ・ 町で確認","text-btn",'data-id="town"') : ""}</div></div>
-    <div class="balances">${action("help",icon("help",17),"icon-btn",'aria-label="遊び方"')}<span class="date">${icon("sun",18)} ${1+g.ageYears(g.calendarDate(state))}年目・第${state.week}週 <i></i><span id="world-time">${clockText()}</span></span>${worldPauseButton()}<span class="balance">ギルド金庫 ${icon("coin",20)}${money(g.guildGold(state))}</span></div>`;
+  $("#top").innerHTML = `<div class="village-title">${drawEmblem(profile.emblem)}<div><small>${esc(profile.name)}</small><h1>木もれびの里</h1></div></div>
+    <div class="balances"><div class="status-cell"><small>${icon("sun",15)} 暦</small><b>${1+g.ageYears(g.calendarDate(state))}年目・第${state.week}週</b><span id="world-time">${clockText()}</span></div>
+    <div class="status-cell"><small>${icon("coin",15)} ギルド金庫</small><b>${money(g.guildGold(state))}</b></div>
+    <div class="status-cell"><small>${icon("flag",15)} ギルドランク</small><b>${g.guildStanding(state).grade}</b></div></div>
+    <div class="top-actions">${worldPauseButton()}${action("help",icon("help",19),"icon-btn",'aria-label="遊び方"')}</div>
+    ${state.raids.active || state.raids.warning ? action("nav",state.raids.active ? "襲撃中 ・ 町を見守る" : "襲撃予告 ・ 町で確認","raid-link text-btn",'data-id="town"') : ""}`;
 }
 function questCard(id) {
   const q = g.quests[id], chosen = selected().quest === id, taken = g.claimed(state, id, selected());
@@ -125,7 +137,8 @@ function questCard(id) {
 }
 function board() {
   const list = g.postedQuests(state);
-  return `<section class="board">${title("scroll","ギルドホール",cap(list.length+" 件の依頼"))}
+  const prepare = action("prepare",icon("pack",17)+" 出発準備へ","primary");
+  return `<section class="board">${title("scroll","今週の依頼",`<div class="actions">${cap(list.length+" 件")}${prepare}</div>`)}
     <div class="quests">${list.map(questCard).join("")}</div></section>`;
 }
 const moraleText = p => `士気 ${p.morale} / 100（能力 ×${g.moraleMultiplier(p).toFixed(1)}）`;
@@ -141,7 +154,7 @@ function partyPanel() {
   return `<section class="panel party-panel"><div class="panel-heading"><h2>${icon("team",22)}遠征パーティー</h2>${cap(party.length+" / 3")}</div>
    <div class="party-members">${party.map(id=>partyRow(id, preparing?null:t.unit.find(u=>u.id===id))).join("") || '<p class="muted">冒険者を編成してください。</p>'}</div>
    <div class="party-bottom"><div class="policy-line"><span>${icon("flag",16)}探索方針</span><b>${g.policies[selected().policy]}</b></div>
-   ${preparing?action("prepare",`${icon("pack",18)} 出発準備へ ${icon("arrow",17)}`,"primary wide"):action("nav",icon("team",17)+" 名簿を見る","btn wide",'data-id="roster"')}${preparing&&!who("shion")?action("nav","雇用候補：狩人シオン "+icon("chevron",12),"text-btn roster-link",'data-id="roster"'):""}</div></section>`;
+   ${preparing ? "" : action("nav",icon("team",17)+" 名簿を見る","btn wide",'data-id="roster"')}${preparing&&!who("shion")?action("nav","雇用候補：狩人シオン "+icon("chevron",12),"text-btn roster-link",'data-id="roster"'):""}</div></section>`;
 }
 function townSnippet() {
   const facilities = [["guild","ギルド"],["forge","鍛冶屋"],["inn","宿屋"],["plaza","広場"],["house","民家"]];
@@ -149,7 +162,7 @@ function townSnippet() {
     const up = id === "forge" ? state.research : state.unlocked;
     return `<figure>${asset(`chip_town_${id}_${up ? "up" : "normal"}`, "", up ? "発展後" : "通常")}<figcaption>${name}</figcaption></figure>`;
   }).join("");
-  return `<section class="town-panel"><div class="toto-art">${asset("toto","","鍛冶見習いトトが金床で槌を振るう")}</div><div class="town-copy"><span class="small-kicker">${icon("hammer",14)} 町のたより</span><h3>${state.research?"トトの新作が完成！":"トトの鍛冶工房"}</h3><p>${state.research?"「鉱石のおかげで、いい刃が打てたよ！」":"「鉱石がひとつあれば、新しい刃を打てるよ！」"}</p>${action("nav","工房をのぞく "+icon("arrow",14),"text-btn",'data-id="forge"')}</div>
+  return `<section class="town-panel"><div class="toto-art">${asset("toto","","鍛冶見習いトトが金床で槌を振るう")}</div><div class="town-copy"><span class="small-kicker">${icon("hammer",14)} 町のたより</span><h3>${state.research?"トトの新作が完成！":"トトの鍛冶工房"}</h3><p>${state.research?"「鉱石のおかげで、いい刃が打てたよ！」":"「鉱石がひとつあれば、新しい刃を打てるよ！」"}</p>${action("open-shop","工房をのぞく "+icon("arrow",14),"text-btn",'data-id="hall"')}</div>
     <div class="town-chips">${chips}</div></section>`;
 }
 function metricsPanel() {
@@ -185,7 +198,7 @@ function partyBoard(inHall) {
   const unlock = inHall && teams().length < g.maxParties ? action("unlock-party",
     `第${teams().length+1}隊を開設 ・ ${price} G`, "btn", g.guildGold(state) < price ? "disabled" : "") : "";
   const settings = inHall ? action("party-settings", icon("edit",15)+" 選択中の隊の設定", "btn") : "";
-  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征パーティー":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
+  return `<section class="team-board"><div class="section-title"><h2>${icon("team",20)}${inHall?"遠征隊の管理":"今週の出発・帰還"}</h2><div class="actions">${settings}${unlock}</div></div><div class="team-list">${cards}</div>${teams().map(rescueNotice).join("")}${inHall ? partyInventory() + morningControls() : morningLetters(true)}${!inHall && waitingLetters().length ? waitUntilNextWeek() : ""}</section>`;
 }
 function morningControls() {
   const team = selected(), resting = team.leaveWeek === state.week;
@@ -253,10 +266,9 @@ function mailbox() {
   const promotions = state.milestones.filter(e => e.guildGrade);
   const guildMail = promotions.length ? `<section class="panel padded">${title("mail","ギルド昇格の伝書")}
     ${promotions.map(e => `<p><small>第${e.week}週</small>　${esc(e.message)}</p>`).join("")}</section>` : "";
-  return pageTitle("GUILD MAIL","伝書箱","隊から届いた相談に返信できます。") +
+  return '<p class="pane-intro">隊から届いた相談に返信できます。</p>' +
     (pending.join("") || '<p class="fine">返信を待っている隊はありません。</p>') +
-    teams().map(rescueNotice).join("") + discoveryLetters(false) + guildMail + raidBulletin() + specialVisitLetters(false) + morningLetters(false) +
-    (pending.length ? waitUntilNextWeek() : "") +
+    (pending.length ? waitUntilNextWeek() : "") + teams().map(rescueNotice).join("") + discoveryLetters(false) + guildMail + raidBulletin() + specialVisitLetters(false) + morningLetters(false) +
     (archive.length ? `<details class="rules"><summary>${archiveTitle}（${archive.length}件）</summary><ul>${archive.join("")}</ul></details>` : "");
 }
 function hall() {
@@ -265,9 +277,6 @@ function hall() {
   if (selected().leaveWeek === state.week) return `<section class="panel padded"><h2>今週は休暇です</h2><p>隊は町で休み、翌週のHP・MP回復量が増えます。</p></section>`;
   const newOrder = state.unlocked && state.history.length===1 && state.week===state.history[0].week+1;
   return `<div class="dashboard"><div class="left-col">${newOrder ? '<p class="fine">マルタから、ひとつ大きな注文が届きました。</p>' : ""}${board()}${townSnippet()}</div><div class="right-col">${partyPanel()}</div></div>`;
-}
-function pageTitle(english,name,desc) {
-  return `<div class="page-title"><span class="small-kicker">${english}</span><h1>${name}</h1><p>${desc}</p></div>`;
 }
 function ageLabel(p) {
   return g.species[p.species].name+" ・ "+p.age+"歳"+({female:" ・ 女性",male:" ・ 男性"}[p.sex] || "");
@@ -352,7 +361,7 @@ function roster() {
       ${visitor ? "" : action("character","人物詳細・育成","primary wide",`data-id="${p.id}" aria-label="${esc(p.name)}の人物詳細・育成"`)}
       ${visitor?action("hire",g.hireCost(p)+" G で雇う","btn wide",g.weekStarted(state)||g.guildGold(state)<g.hireCost(p)?"disabled":""):prep&&!resting&&!g.awayMember(state,p.id)?action("prepare",icon("team",16)+" 編成する","btn wide"):""}</article>`;
   };
-  return pageTitle("ADVENTURERS","冒険者名簿","仲間の得意な仕事を確かめて、今週の遠征を任せましょう。")+
+  return '<p class="pane-intro">仲間の得意な仕事を確かめて、今週の遠征を任せましょう。</p>'+
     `<div class="section-title"><h2>${icon("team")}所属冒険者 ${state.roster.length} 人</h2>${!who("custom")?action("create","＋ 自作冒険者を登録","btn",g.weekStarted(state)?"disabled":""):""}</div><div class="roster-grid">${state.roster.map(card).join("")}</div>
     ${candidate ? `<h2>所属を希望する応募者</h2><div class="roster-grid">${card(g.recruit(state))}</div>` : ""}${visitorBoard()}${familyPanel()}`;
 }
@@ -370,7 +379,7 @@ let guestId, guestOffer;
 function visitorBoard() {
   const visitors = g.visitorList(state), market = state.market;
   const ordered = visitors.filter(p => g.uniqueGuests[p.id]).concat(visitors.filter(p => !g.uniqueGuests[p.id]));
-  return `<section class="panel padded guest-board">${title("team","今週の来訪者",cap("名声 "+g.fame(state)))}
+  return `<section class="panel padded guest-board" tabindex="-1">${title("team","今週の来訪者",cap("名声 "+g.fame(state)))}
     <p class="fine">複数のギルドで仕事をする冒険者です。週の前半はホールで会えます。専属契約を結ぶと所属冒険者として編成できます。週後半は一般冒険者向けの継続依頼に出発します。</p>
     <div class="guest-list">${ordered.map(p=>action("guest",portrait(p)+`<span><b>${g.uniqueGuests[p.id] ? "特別な来訪 ・ " : ""}${esc(p.name)}</b><small>${g.jobName(p.job,p.sex)} ・ ${esc(g.rankName(state,p))} ・ ${ageLabel(p)}</small>
       <small>${p.mission ? g.dungeons[p.mission.dungeon].name+"で「"+g.quests[p.mission.quest].name+"」を受注中" : "ホールに滞在中"}</small></span>`,"btn",`data-id="${p.id}"`)).join("") || "今週の来訪者はいません。"}</div>
@@ -613,7 +622,7 @@ function buyerPicker() {
 function shops() {
   if (activeShop) return shopPanel();
   const workshops = Object.entries(state.town.workshops);
-  return pageTitle("WORKSHOPS","町のショップ","店を選んで、素材の納品や加工を依頼できます。") +
+  return '<p class="pane-intro">店を選んで、素材の納品や加工を依頼できます。</p>' +
     '<div class="shop-list">' + workshops.map(([id,shop]) => {
       const type = g.shopTypes[shop.type];
       return action("open-shop", asset("scenery_"+type.building) +
@@ -678,42 +687,44 @@ function shopOrders(shop, type) {
 function shopPanel() {
   const shop = state.town.workshops[activeShop], type = g.shopTypes[shop.type];
   if (state.town.repairs[activeShop] || (activeShop==="hall" && state.town.smithReadyWeek>state.week)) {
-    return action("nav","ショップ一覧へ","text-btn",'data-id="shops"')+'<section class="panel padded">'+
+    return '<section class="panel padded">'+
       title("hammer",type.name+" ・ 休業中")+repairStatus(activeShop)+
       (activeShop==="hall" && state.town.smithReadyWeek>state.week ? '<p>'+g.artisanName(shop)+'は第'+state.town.smithReadyWeek+'週まで療養中です。</p>' : "")+'</section>';
   }
   const max = shop.level === g.shopRanks.length;
-  return `<div class="shop-panel">${action("nav","ショップ一覧へ","text-btn",'data-id="shops"')}
+  return `<div class="shop-panel">
     <div class="forge-intro">${asset(activeShop==="hall"?"toto":"scenery_"+type.building,"smith")}
-    <div><small>${shopSite(activeShop)} ・ 店 Lv.${shop.level}</small><h2>${type.name}</h2>
-    <b>${g.shopRanks[shop.level-1]}の${g.artisanName(shop)}</b><p>「${type.lines[shop.level-1]}」</p>
+    <div><small>${shopSite(activeShop)} ・ 店 Lv.${shop.level}</small><h3>${g.shopRanks[shop.level-1]}の${g.artisanName(shop)}</h3><p>「${type.lines[shop.level-1]}」</p>
     ${activeShop!=="hall" ? `<small>${buildingEffect(type.building,g.plotForSite(activeShop),shop)}</small>` : ""}</div></div>
+    ${buyerPicker()}
+    <section class="shop-training"><div><b>${max?"親方の腕前":"店の経験 "+shop.xp+" / "+(3*shop.level)+" EXP"}</b>
+    <small>${max?"最高品質で加工できます。":"納品で1 EXP、加工で2 EXP。店の成長で品質が上がります。"}</small></div>
+    ${!max ? action("deliver",materialName(type)+"を倉庫から1個納品（在庫 "+shopStock(type)+"）","btn",shopStock(type)>0?"":"disabled") : ""}</section>
+    <div class="shop-tabs">${[["orders","注文・品揃え"],["tree","スキルツリー"]].map(([id,label])=>
+      action("shop-view",label,"btn",`data-id="${id}" aria-pressed="${shopView===id}"`)).join("")}</div>
+    ${shopView==="tree"? shopTree(shop,type) : shopOrders(shop,type)}
     <section class="shop-training"><div><b>工房の技術継承 ・ ${shop.lineage.generation}代目</b>
     <p>${g.species[shop.lineage.species].name} ・ 職人 ${shop.lineage.age}歳 ／ 見習い ${shop.lineage.apprenticeAge}歳（修業${shop.lineage.apprenticeYears}年・実習${shop.lineage.lessons}/6）</p>
     <small>営業4年ごとに加工品の品質と主効果＋1（上限＋8、現在＋${g.craftBonus(shop)}）。見習いは4年で継承の準備が整います。納品・加工で実習が6に達すると3年に短縮されます。代替わり後も店の技・品質を受け継ぎます。</small></div></section>
     ${activeShop === "hall" ? `<section class="shop-training"><div><b>からくり工房</b><p>義肢の品質 ⭐${g.prosthesisQuality(state)} ・ 補正＋${g.prosthesisBonus(state)}％ ・ ${g.limbCost} G</p><small>職人の腕と品質で補正は最大＋80％。帰還後に人物手帳から注文できます。</small>
       <div class="actions">${state.roster.filter(p=>Object.keys(p.debuffs).some(k=>g.debuffs[k]?.limb) && !g.awayMember(state,p.id)).map(p=>action("character",esc(p.name)+"の義肢を選ぶ","btn",`data-id="${p.id}"`)).join("")}</div></div></section>` : ""}
-    ${buyerPicker()}<section class="shop-training"><div><b>${max?"親方の腕前":"店の経験 "+shop.xp+" / "+(3*shop.level)+" EXP"}</b>
-    <small>${max?"最高品質で加工できます。":"納品で1 EXP、加工で2 EXP。店の成長で品質が上がります。"}</small></div>
-    ${!max ? action("deliver",materialName(type)+"を倉庫から1個納品（在庫 "+shopStock(type)+"）","btn",shopStock(type)>0?"":"disabled") : ""}</section>
-    <div class="shop-tabs">${[["orders","注文・品揃え"],["tree","スキルツリー"]].map(([id,label])=>
-      action("shop-view",label,"btn",`data-id="${id}" aria-pressed="${shopView===id}"`)).join("")}</div>
-    ${shopView==="tree"? shopTree(shop,type) : shopOrders(shop,type)}</div>`;
+</div>`;
 }
 function openShop(id) {
+  const origin = currentView();
   const shop = state.town.workshops[id];
   if (!shop) return;
   activeShop = id;
   recipeId = g.shopTypes[shop.type].recipes[0].id;
   finishId = "plain";
   shopView = "orders";
-  navigate("shops", {keepShop:true});
+  navigate("shops", {keepShop:true, origin});
 }
 function tourismDetails(r) {
   return `観光客 ${r.visitors}人 ・ 町内消費税 ${r.visitorTax} G（1人2 G）・ 土産物税 ${r.souvenirTax} G（売上 ${r.souvenirSales} Gの2割、端数切り捨て）・ 市場税 ${r.marketTax} G`;
 }
 function journalPage() {
-  return pageTitle("GUILD JOURNAL","帰還記録","遠征の判断と、仲間が持ち帰った成果の記録。")+
+  return '<p class="pane-intro">遠征の判断と、仲間が持ち帰った成果の記録。</p>'+
     (state.town.taxHistory.length ? `<details class="panel archive"><summary>週ごとの観光・税収</summary><ul>${state.town.taxHistory.map(r =>
       `<li><b>第${r.week}週　ギルド金庫 ＋${r.total} G</b><br>${tourismDetails(r)}</li>`).join("")}</ul></details>` : "") +
     state.raids.reports.map(r => `<details class="panel archive"><summary>第${r.week}週の町の防衛</summary><p>${raidReport(r)}</p></details>`).join("") +
@@ -959,7 +970,7 @@ function townView(people,taxes) {
   const omen = state.town.landmark === "observatory" ? `<p class="raid-bulletin"><b>今週の星読み ・ ${g.luckyWeek(state.week) ? "吉" : "凶"}</b>　${g.luckyWeek(state.week) ? "深層の罠は静かです。宝箱では星図の導きで鉱石をもう1個拾えます。" : "深層の罠が活発です。星図を携えた隊は罠を感知できます。"}</p>` : "";
   return raidBulletin() + (page === "town" ? discoveryLetters(true) : "") + specialVisitLetters(true) + omen + `<figure class="village-map">${townViewControls()}${panorama("town","円形広場にギルドホールが面する木もれびの里。空きのある区画を選ぶと建築できます。")}
     <figcaption>${icon("map",17)} 空きのある区画を選んで建築 <span>拡大中はドラッグで移動できます。外周の街道と防衛区画は立体地形で確認できます。</span></figcaption></figure>
-    <dl class="town-ledger">
+    ${partyBoard(false)}<dl class="town-ledger">
       <div><dt>${icon("home",16)} 通常区画の建築数</dt><dd>${g.territoryPlots.filter(plot=>state.town.plots[plot.id]).length}<small> / ${g.territoryPlots.length} 区画</small></dd></div>
       <div><dt>${icon("flag",16)} 防衛専用地</dt><dd>${g.defenseSpots.filter(p=>state.town.plots[p.id]).length}<small> / ${g.defenseSpots.length} か所</small></dd></div>
       <div><dt>${icon("shield",16)} 防衛値</dt><dd>${totals.defense}</dd></div>
@@ -967,7 +978,7 @@ function townView(people,taxes) {
       <div><dt>${icon("coin",16)} 施設収入</dt><dd>${totals.income}<small> G / 週</small></dd></div>
       <div><dt>${icon("map",16)} 今週の観光客</dt><dd>${taxes.visitors}<small> 人</small></dd></div>
     </dl><details class="rules"><summary>今週の税収見込み　${taxes.total} G</summary>
-      <p>${tourismDetails(taxes)}</p><p>週末にギルド金庫へ入金します。観光客は観光施設・名声・ギルドランク・町の建築数に応じて増えます。</p></details>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster"')}</section>${partyBoard(false)}<details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
+      <p>${tourismDetails(taxes)}</p><p>週末にギルド金庫へ入金します。観光客は観光施設・名声・ギルドランク・町の建築数に応じて増えます。</p></details>${facilityList()}${raidAftermath()}<section class="panel padded"><h2>ホールの来訪者</h2><p>${g.visitorList(state).filter(p=>!p.mission).length}人が滞在中 ・ 名声 ${g.fame(state)}</p>${action("nav","来訪者に会う","btn",'data-id="roster" data-section="guests"')}</section><details class="town-residents"><summary>住人・雇用候補のうち町にいる人（${people.length}人）</summary>
     <ul>${people.map(p => `<li>${p.voice.job ? portrait(p.voice,"resident-portrait") : asset("px_"+p.sprite+"_front","resident-art")}<div><b>${esc(p.name)}</b><small>${p.role}</small></div></li>`).join("")}</ul></details>`;
 }
 
@@ -988,7 +999,7 @@ function render() {
   const built = GuildVoxelMaps.townAppearances(state.town);
   const layout = JSON.stringify([built,state.town.landmark,repairs,walkers.map(p=>[p.id,p.sprite,p.name,p.scale])]);
   const previous = townScene;
-  const scroll = previous && [previous.viewport.scrollLeft, previous.viewport.scrollTop];
+  const scroll = previous?.viewport.clientWidth ? [previous.viewport.scrollLeft, previous.viewport.scrollTop] : previous?.scroll;
   const featsOpen = $("#guild-feats")?.open;
   const familyOpen = $("#family-panel")?.open;
   const inventoryOpen = $("#party-inventory")?.open;
@@ -1000,12 +1011,17 @@ function render() {
   const drawerId = page==="town" ? "hall" : page;
   const [symbol,tabLabel] = panes[drawerId];
   const label = drawerId === "hall" ? hallLabel() : drawerId === "shops" && activeShop ? (activeShop === "hall" ? "町の鍛冶屋" : g.shopTypes[state.town.workshops[activeShop].type].name) : tabLabel;
-  const drawer = (drawerId === "hall" ? guildCharter() + metricsPanel() + facilityList() + partyBoard(true) : "") +
-    ({hall,roster,shops,mail:mailbox,history:journalPage}[drawerId])() + (drawerId === "hall" ? visitorBoard() : "");
+  let drawer;
+  if (drawerId === "hall") {
+    drawer = selected().phase === "prep" ? partyBoard(true) + hall() : hall() + partyBoard(true);
+    drawer += visitorBoard() + guildCharter() + metricsPanel() + facilityList();
+  } else {
+    drawer = ({roster,shops,mail:mailbox,history:journalPage}[drawerId])();
+  }
   $("#screen").innerHTML = (saveWarning?`<p role="status" class="warning">${esc(saveWarning)}</p>`:"")+
-    townView(people,taxes)+`<section id="management" aria-label="${label}" ${page==="town"?"hidden":""}>
-    <div class="drawer-bar">${icon(symbol,19)}<b>${label}</b>
-    ${action("close-drawer",icon("close",18),"icon-btn",'aria-label="引き出しを閉じて元の画面に戻る"')}</div>
+    `<div class="town-overview">${townView(people,taxes)}</div><section id="management" aria-label="${label}" ${page==="town"?"hidden":""}>
+    <div class="drawer-bar">${icon(symbol,19)}<h2>${label}</h2>
+    ${action("close-drawer",icon("arrow",16)+" 戻る","btn back-btn",'aria-label="前の画面に戻る"')}</div>
     <div class="drawer-body">${drawer}</div></section>`;
   if (familyOpen && $("#family-panel")) $("#family-panel").open = true;
   if (featsOpen && $("#guild-feats")) $("#guild-feats").open = true;
@@ -1021,7 +1037,13 @@ function render() {
       townScene = {layout,emblem,viewport,stop:GuildScenery.mount(canvas,
         {people:walkers,chatterRate:sceneChatterRate,camera:townCamera,zoom:townZoom,zoomChanged:updateTownZoom,selectPerson:selectTownPerson,turn:delta=>changeTownView(true,delta),url:assetUrl,time:worldSeconds,raidScene:townRaidScene,built,landmark:state.town.landmark,emblem,selectPlot,activePlot,ranges:plot=>plot.sites?.filter(site=>state.town.defenses[site]).map(site=>({center:g.defenseCenter(site,state.town.plots),range:g.defenseStats(state,site).range})) || [],openHall:()=>navigate("hall")})};
     }
-    if (scroll) townScene.viewport.scrollTo(...scroll);
+    townScene.scroll = scroll;
+    if (townScene.viewport.clientWidth) {
+      if (scroll) townScene.viewport.scrollTo(...scroll);
+      else if (previous) {
+        townScene.viewport.scrollLeft = (townScene.viewport.scrollWidth - townScene.viewport.clientWidth) / 2;
+      }
+    }
     if (page==="hall" && selected().phase==="explore") {
       stopDungeon = GuildScenery.mount($('canvas[data-scene="dungeon"]'),
         {people:expeditionPeople(selected().trip),chatterRate:sceneChatterRate,trip:selected().trip,url:assetUrl,fraction:stepFraction});
@@ -1224,8 +1246,10 @@ function report(r, live) {
     <details class="rules"><summary>判断と結果の記録</summary>${logs(r.log)}</details></section>${live?stockPanel():""}</div>
     ${live && waitingLetters().length ? `<div class="close-day">${waitUntilNextWeek()}</div>` : live?`<div class="close-day"><p>${g.anyAway(state)?"遠征中の隊がすべて帰還すると、週を締められます。":state.unlocked?"翌週へ向けて、仲間を休ませましょう。":"トトがマルタに帰還を知らせました。来週、新しい注文が届きます。"}</p>${action("next",icon("sun",17)+" 週を締めて翌週へ","primary",g.anyAway(state)?'disabled title="全隊の帰還を待ってください"':"")}</div>`:""}</div>`;
 }
+let characterReturn;
 function modalHead(sym,name) {
-  return `<div class="modal-head"><h2 id="dialog-title">${icon(sym,24)}${name}</h2>${action("close",icon("close",19),"icon-btn",'aria-label="閉じる"')}</div>`;
+  const control = characterReturn && modal !== "character" ? action("dialog-back",icon("arrow",16)+" 戻る","btn back-btn",'aria-label="人物手帳に戻る"') : action("close",icon("close",19),"icon-btn",'aria-label="閉じる"');
+  return `<div class="modal-head"><h2 id="dialog-title">${icon(sym,24)}${name}</h2>${control}</div>`;
 }
 let profileSlot, profileDraft, emblemUpload;
 const policySuggestions = ["安全第一", "深く潜る", "稼ぎ重視"];
@@ -1422,6 +1446,9 @@ function plotPanel(plot) {
     Array.from(groups, ([group,items])=>`<section class="catalog-group"><h4>${group}</h4><div>${items.join("")}</div></section>`).join("");
 }
 function showModal(type) {
+  if (modal === "character" && ["gambits","appearance","retirement"].includes(type)) {
+    characterReturn = {action:type, scroll:$("#dialog").scrollTop};
+  }
   modal=type; $("#dialog").setAttribute("aria-labelledby","dialog-title");
   $("#event-notice").hidden = true;
   if (type==="prepare") {
@@ -1431,6 +1458,14 @@ function showModal(type) {
   if(type==="create"){ customImage="";imageBusy=false;imageTicket++; }
   drawModal();
   if (!$("#dialog").open) $("#dialog").showModal();
+  $("#dialog").scrollTop = 0;
+  if (type === "character" && characterReturn) {
+    $("#dialog").scrollTop = characterReturn.scroll;
+    $(`#dialog [data-action="${characterReturn.action}"]`)?.focus({preventScroll:true});
+    characterReturn = null;
+  } else if (characterReturn && type !== "urgent") {
+    $('#dialog [data-action="dialog-back"]')?.focus({preventScroll:true});
+  }
 }
 function drawModal() {
   const body=$("#dialog-body");
@@ -1466,7 +1501,7 @@ function drawModal() {
   if(modal==="character") body.innerHTML=characterDetail();
   if(modal==="resident-family") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の交友")+relationshipPanel(who(characterId));
   if(modal==="retirement") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の引退")+
-    `${ageDetails(who(characterId))}<p>引退すると遠征と育成を終え、町の住人になります。歩みは帰還記録に残ります。引退後の再入団はできません。</p><div class="actions">${action("retire","引退して町に残る","primary")}${action("character","人物手帳に戻る","btn",`data-id="${characterId}"`)}</div>`;
+    `${ageDetails(who(characterId))}<p>引退すると遠征と育成を終え、町の住人になります。歩みは帰還記録に残ります。引退後の再入団はできません。</p><div class="actions">${action("retire","引退して町に残る","primary")}</div>`;
   if(modal==="gambits") body.innerHTML=gambitEditor();
   if(modal==="profile") body.innerHTML=profileForm();
   if(modal==="help") body.innerHTML=modalHead("book","遊び方") + weekSpeedControl() + chatterControl() + `<ol class="help-list"><li><b>週の初めに仕事を選ぶ</b><p>リーダーが週初めの伝書で行き先を知らせ、標準で12秒の支度を終えると出発します。ホールで隊ごとの優先条件を選べます。手動で依頼や編成を決めたい週は、伝書の「今週の自動判断を止める」を押してください。</p></li><li><b>遠征パーティーを送り出す</b><p>出発準備で1〜3人とリーダーを選択。体調が悪いとリーダーは休暇を取り、プレイヤーもホールから休暇を指示できます。安全第一は戦闘を避け、素材優先では性格が分岐の決め方に影響します。</p></li><li><b>探索と通信を見守る</b><p>出発すると、仲間は約2秒に1歩進み、採集も戦闘も自分たちで行います。全員の動きと相談の期限を止めるには「全体を一時停止」を選びます。標準では、ゲームを表示している実時間4分で翌週になります。遠征パーティーの「戦術オーダー」から、手番で優先する条件・対象・行動を編集できます。隊だけを止めるには「隊を一時停止」、早く見届けるには速度を×2に。分岐の相談は伝書箱に届き、送信した隊が返事を待ちます。仲間が倒れたときは緊急通信が割り込み、全隊が待機します。通常・緊急ともに翌週が返信期限です。「返信せず翌週へ」で週を進めると、未返信の相談は各隊のリーダーが判断します。早めに切り上げたいときは「帰還する」を選びましょう。</p></li><li><b>成果を翌週へ</b><p>帰還時に自動納品・精算。余った素材はギルド倉庫に入り、売却や工房の研究に使えます。隊は運転資金を残して装備を購入し、残った余剰金をギルド金庫へ戻します。週を締めると翌週です。</p></li></ol>${combatNotes()}<p class="fine">探索の歩みと操作はそのつど保存されます。開き直すと、速度や一時停止、返信待ちも復元されます。</p>${action("close","手帳を閉じる","primary wide")}`;
@@ -1530,8 +1565,7 @@ function appearanceFields(p) {
 function appearanceForm(p) {
   return modalHead("team","職業・外見を編集")+`<form id="appearance-editor">${jobField(p,"appearance-job")}${appearanceFields(p)}
     ${hasUploadedPortrait(p) ? `<label><input type="checkbox" name="useJobPortrait" ${p.useJobPortrait ? "checked" : ""}>登録した顔画像の代わりに職業の顔絵を使う</label>` : ""}
-    <div id="appearance-preview"></div><button class="primary wide" type="submit">変更を保存</button>
-    ${action("character","人物手帳に戻る","btn", 'data-id="custom"')}</form>`;
+    <div id="appearance-preview"></div><button class="primary wide" type="submit">変更を保存</button></form>`;
 }
 function updateEditPreview() {
   const form = $("#appearance-editor");
@@ -1598,41 +1632,54 @@ async function readFace(input) {
   } catch(error){input.value="";toast(error.message || "画像を読み込めませんでした。");}
   finally { if(ticket===imageTicket){imageBusy=false;updatePreview();} }
 }
-function closeModal() { $("#dialog").close(); modal=""; refreshNotice(); }
+function closeModal() { characterReturn = null; $("#dialog").close(); modal=""; refreshNotice(); }
 let drawerHistory = [];
 function currentView() {
-  return {page, party:state.selectedParty, drawerScroll:$("#management")?.scrollTop || 0, windowScroll:window.scrollY || 0};
+  return {page, party:state.selectedParty, shop:page === "shops" ? activeShop : null,
+    shopView, recipeId, finishId, drawerScroll:$("#management")?.scrollTop || 0, windowScroll:window.scrollY || 0};
 }
 function restoreView(view) {
   page = view?.page || "town";
+  if (page === "shops") {
+    activeShop = view.shop;
+    shopView = view.shopView;
+    recipeId = view.recipeId;
+    finishId = view.finishId;
+  }
   if (view && teams()[view.party - 1]) state.selectedParty = view.party;
   restoringView = view;
 }
-function changePage(id) {
+function changePage(id, origin = currentView()) {
   if (id === "town") drawerHistory = [];
-  else if (id !== page) {
+  else if (id !== origin.page || (id === "shops" && origin.shop !== activeShop)) {
     // Keep one return point per drawer when switching repeatedly between tabs.
-    drawerHistory = drawerHistory.filter(view => view.page !== id && view.page !== page);
-    drawerHistory.push(currentView());
+    const matches = (view, pageId, shop) => view.page === pageId && (pageId !== "shops" || view.shop === shop);
+    drawerHistory = drawerHistory.filter(view => !matches(view,id,activeShop) && !matches(view,origin.page,origin.shop));
+    drawerHistory.push(origin);
   }
   page = id;
 }
 function closeDrawer() {
-  const closed = page, party = state.selectedParty;
+  const shop = page === "shops" && activeShop, party = state.selectedParty;
   restoreView(drawerHistory.pop());
   render();
   if (state.selectedParty !== party) save();
-  $(`#sidebar [data-id="${closed}"]`)?.focus({preventScroll:true});
+  const focus = page === "shops" && !activeShop && shop ? `#management [data-action="open-shop"][data-id="${shop}"]` : `#sidebar [data-id="${page}"]`;
+  $(focus)?.focus({preventScroll:true});
 }
-function navigate(id, {keepShop = false, party} = {}) {
+function navigate(id, {keepShop = false, party, origin = currentView()} = {}) {
   if (id === "forge") return openShop("hall");
-  if (id === "shops" && !keepShop) activeShop = null;
+  if (id === "shops" && !keepShop) {
+    const previous = drawerHistory.at(-1);
+    if (page === "shops" && activeShop && previous?.page === "shops" && !previous.shop) return closeDrawer();
+    activeShop = null;
+  }
   if (modal==="plot" && $("#dialog").open) closeModal();
-  const closed = id==="town" && page!=="town" ? page : null;
-  changePage(id);
+  const returningToTown = id === "town" && page !== "town";
+  changePage(id, origin);
   if (party) state.selectedParty = party;
   render(); window.scrollTo(0,0);
-  if (closed) $(`#sidebar [data-id="${closed}"]`)?.focus();
+  if (returningToTown) $('#sidebar [data-id="town"]')?.focus({preventScroll:true});
   else if (page!=="town") $("#management .drawer-bar button")?.focus({preventScroll:true});
 }
 document.addEventListener("click",event=>{
@@ -1645,7 +1692,14 @@ document.addEventListener("click",event=>{
       case "town-mode": changeTownView(id==="stack"); return;
       case "town-zoom": townScene.stop.setZoom(townZoom + Number(id)*.25); return;
       case "town-turn": changeTownView(true,Number(id)); return;
-      case "nav": navigate(id); return;
+      case "nav":
+        navigate(id);
+        if (button.dataset.section === "guests") {
+          const guests = $("#management .guest-board");
+          guests.focus({preventScroll:true});
+          guests.scrollIntoView({block:"start"});
+        }
+        return;
       case "close-drawer": closeDrawer(); return;
       case "appearance":
         if (characterId === "custom" && !g.awayMember(state,characterId)) showModal("appearance");
@@ -1765,6 +1819,7 @@ document.addEventListener("click",event=>{
         toast(selectedPlot.name+"に"+buildingName(site)+"ができました。");
         return;
       }
+      case "dialog-back": showModal("character"); return;
       case "close": closeModal(); return;
       case "help": case "work": case "prepare": case "create":
         if ((cmd === "prepare" && selected().phase !== "prep") || (cmd === "create" && g.weekStarted(state))) return;
@@ -1888,8 +1943,7 @@ document.addEventListener("change",event=>{
   }
   if(el.id==="shop-buyer"){ buyerNumber=Number(el.value); render(); $("#shop-buyer").focus(); return; }
   if(el.id==="shop-recipe" || el.id==="shop-finish"){
-    if(el.id==="shop-buyer"){ buyerNumber=Number(el.value); render(); $("#shop-buyer").focus(); return; }
-  if(el.id==="shop-recipe") recipeId=el.value;
+    if(el.id==="shop-recipe") recipeId=el.value;
     else finishId=el.value;
     render(); $("#"+el.id).focus(); return;
   }
@@ -1972,10 +2026,17 @@ document.addEventListener("submit",event=>{
   try {g.register(state,{...Object.fromEntries(new FormData(event.target)),portrait:customImage}); closeModal();save();render();toast("新しい仲間を名簿に登録しました。");}
   catch(error){toast(error.message);}
 });
-$("#dialog").addEventListener("cancel",event=>{ if (modal === "urgent") event.preventDefault(); });
+$("#dialog").addEventListener("cancel",event=>{
+  if (modal === "urgent") event.preventDefault();
+  else if (characterReturn) {
+    event.preventDefault();
+    showModal("character");
+  }
+});
 $("#dialog").addEventListener("close",()=>{
   if ($("#dialog").open) return;
   modal="";
+  characterReturn = null;
   refreshNotice();
   if (characterId) {
     if (page === "roster") {
@@ -2019,7 +2080,8 @@ function tickWorld() {
     if (modal === "character") refreshCharacter();
   } else {
     const time = $("#world-time");
-    if (time) time.textContent = clockText();
+    const clock = clockText();
+    if (time && time.textContent !== clock) time.textContent = clock;
     if (state.raids.warning) document.querySelectorAll?.(".raid-days").forEach(el => { el.textContent = raidDays(); });
   }
   if (changed || now-lastClockSave >= 5000) {
