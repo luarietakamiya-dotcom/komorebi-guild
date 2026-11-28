@@ -1429,6 +1429,10 @@ const Guild = (() => {
     visits[guest.id] = s.week;
     if (first) record(guest,s.week,message,{firstVisit:true});
     s.morningMail.unshift({week:s.week,sender:guest.name,message,specialVisit:guest.id});
+    queueNotice(s,"visit",guest,jobName(guest.job,guest.sex)+"の"+guest.name+"が"+(first ? "初めて" : "再び")+"町を訪れました。");
+  }
+  function queueNotice(s,kind,p,message) {
+    s.eventNotices.push({kind,personId:p.id,week:s.week,message});
   }
   const visitorList = s => s.registry.filter(p => s.visitors.includes(p.id));
   function startGuestMissions(s) {
@@ -1532,7 +1536,7 @@ const Guild = (() => {
   }
   function initial() {
     const s = {
-      clock:{elapsed:0,paused:false,speed:1}, chatterRate:"quiet", alumni:[], morningMail:[], priority:"safe", decisionWeek:0, leaveWeek:0,
+      clock:{elapsed:0,paused:false,speed:1}, chatterRate:"quiet", alumni:[], morningMail:[], eventNotices:[], priority:"safe", decisionWeek:0, leaveWeek:0,
       guildProfile: profileFor(0), partyProfile: profileFor(1), allowStatReset:true,
       extraParties: [], selectedParty: 1, town: { plots: {}, food: 0, landmark:null, taxHistory:[] }, week: 1, phase: "prep", gold: 240, roster: [
         makePerson("mina", "ミナ", "sword", "bold", "あたし", "casual"),
@@ -1713,6 +1717,7 @@ const Guild = (() => {
       if (/^child-\d+$/.test(p.id)) s.nextChildId = Math.max(s.nextChildId || 1,Number(p.id.slice(6))+1);
     }
     s.morningMail ??= [];
+    s.eventNotices ??= [];
     s.extraParties ??= [];
     s.allowStatReset ??= true;
     const legacyMembers = new Set(s.roster.filter(p => !p.career).map(p => p.id));
@@ -2229,6 +2234,7 @@ const Guild = (() => {
     u.injury = p.injury = {kind,readyWeek:p.readyWeek};
     const message = p.name + "が重傷（" + kind + "）。第" + p.readyWeek + "週の始めまで療養。";
     log(t,message); record(p,s.week,message);
+    queueNotice(s,"injury",p,message);
   }
   function startFight(s, team) {
     const t = team.trip;
@@ -2525,6 +2531,7 @@ const Guild = (() => {
     const message = p.name+"は"+source+"で"+debuffs[kind].name+until+"。";
     record(p,s.week,message);
     log(t,message);
+    if (debuffs[kind].axes.length) queueNotice(s,"injury",p,message);
   }
   function defeatedParty(s,team) {
     const t = team.trip, survivors = t.unit.filter(u => u.state !== "lost");

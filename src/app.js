@@ -38,6 +38,35 @@ const action = (id, label, cls = "btn", attrs = "") => `<button type="button" cl
 const tag = (txt, cls = "") => `<span class="tag ${cls}">${txt}</span>`;
 const title = (symbol, txt, end = "") => `<div class="section-title"><h2>${icon(symbol,23)}${txt}</h2>${end}</div>`;
 const cap = (txt, cls = "") => `<span class="caption ${cls}">${txt}</span>`;
+let noticeMarkup = "", recordNotice;
+function noticeDestination(notice) {
+  if (g.person(state,notice.personId)) return "character";
+  if (state.visitors.includes(notice.personId)) return "guest";
+  return "notice-record";
+}
+function refreshNotice() {
+  const panel = $("#event-notice"), notice = state.eventNotices[0];
+  panel.hidden = !notice || !!modal;
+  if (panel.hidden) return;
+  const labels = {character:"人物詳細を見る",guest:"来訪者を接待する","notice-record":"人物の記録を見る"};
+  const markup = `<h2>${notice.kind === "visit" ? "特別な来訪" : "重大な負傷"} <small>第${notice.week}週</small></h2>
+    <p>${esc(notice.message)}</p><div class="actions">${action("notice-open",labels[noticeDestination(notice)],"primary")}${action("notice-dismiss","閉じる")}</div>`;
+  if (markup !== noticeMarkup) panel.innerHTML = noticeMarkup = markup;
+}
+function acknowledgeNotice(open) {
+  const notice = state.eventNotices[0];
+  if (!notice || modal) return;
+  if (open) {
+    const destination = noticeDestination(notice);
+    if (destination === "guest") { guestId = notice.personId; guestOffer = "basic"; }
+    else if (destination === "character") characterId = notice.personId;
+    else recordNotice = notice;
+    showModal(destination);
+  }
+  state.eventNotices.shift();
+  save();
+  refreshNotice();
+}
 function save() {
   if (demo) return;
   rememberProgress();
@@ -951,6 +980,7 @@ function sceneChatterRate(kind) {
 }
 let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
+  refreshNotice();
   const people = townPeople();
   const taxes = g.tourismReport(state);
   const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.characterArt(p).stack,name:g.familiarName(p),voice:p})),touristWalkers(taxes.visitors));
@@ -1098,6 +1128,7 @@ function advanceExpedition(team) {
     $("#trip-log").innerHTML = logs([...team.trip.log].reverse());
     $(".party-members").innerHTML = team.trip.unit.map(u => partyRow(u.id, u)).join("");
   }
+  refreshNotice();
   scheduleStep();
 }
 function focusEmergency() {
@@ -1392,6 +1423,7 @@ function plotPanel(plot) {
 }
 function showModal(type) {
   modal=type; $("#dialog").setAttribute("aria-labelledby","dialog-title");
+  $("#event-notice").hidden = true;
   if (type==="prepare") {
     const team = selected(), party = team.party.filter(id => g.available(state,who(id)));
     draft = {party,dungeon:team.dungeon,leader:party.includes(team.leader) ? team.leader : party[0],policy:team.policy,meds:team.meds};
@@ -1425,6 +1457,12 @@ function drawModal() {
     updateEditPreview();
   }
   if(modal==="guest") body.innerHTML=guestDetail();
+  if (modal === "notice-record") {
+    const p = who(recordNotice.personId) || state.registry.find(p => p.id === recordNotice.personId);
+    body.innerHTML = modalHead("book",esc(p.name)+"の記録") + `<p>第${recordNotice.week}週　${esc(recordNotice.message)}</p>
+      <p>${esc(p.departure?.message || "この来訪は終了しました。")}</p><h3>活動の履歴</h3>
+      ${p.career.slice().reverse().map(e => `<p>第${e.week}週　${esc(e.message)}</p>`).join("")}`;
+  }
   if(modal==="character") body.innerHTML=characterDetail();
   if(modal==="resident-family") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の交友")+relationshipPanel(who(characterId));
   if(modal==="retirement") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の引退")+
@@ -1560,7 +1598,7 @@ async function readFace(input) {
   } catch(error){input.value="";toast(error.message || "画像を読み込めませんでした。");}
   finally { if(ticket===imageTicket){imageBusy=false;updatePreview();} }
 }
-function closeModal() { $("#dialog").close(); modal=""; }
+function closeModal() { $("#dialog").close(); modal=""; refreshNotice(); }
 let drawerHistory = [];
 function currentView() {
   return {page, party:state.selectedParty, drawerScroll:$("#management")?.scrollTop || 0, windowScroll:window.scrollY || 0};
@@ -1602,6 +1640,8 @@ document.addEventListener("click",event=>{
   const {action:cmd,id}=button.dataset;
   try {
     switch(cmd) {
+      case "notice-open": acknowledgeNotice(true); return;
+      case "notice-dismiss": acknowledgeNotice(false); return;
       case "town-mode": changeTownView(id==="stack"); return;
       case "town-zoom": townScene.stop.setZoom(townZoom + Number(id)*.25); return;
       case "town-turn": changeTownView(true,Number(id)); return;
@@ -1936,6 +1976,7 @@ $("#dialog").addEventListener("cancel",event=>{ if (modal === "urgent") event.pr
 $("#dialog").addEventListener("close",()=>{
   if ($("#dialog").open) return;
   modal="";
+  refreshNotice();
   if (characterId) {
     if (page === "roster") {
       render();

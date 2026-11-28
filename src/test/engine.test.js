@@ -35,6 +35,7 @@ test("通信待ちの停止・通常枠使用後の必須通信・撤退時の�
   const s = G.initial(); toFork(s, "gald");
   assert.equal(s.trip.pending.type, "fork"); G.reply(s, "pass"); G.step(s);
   assert.deepEqual([s.trip.pending.target, s.trip.pending.type, s.trip.calls], ["popo", "crisis", 1]);
+  assert.deepEqual(s.eventNotices,[]);
   const frozen = JSON.stringify(s); assert.throws(() => G.step(s)); assert.throws(() => G.returnHome(s));
   assert.equal(JSON.stringify(s), frozen); G.reply(s, "return");
   assert.equal(s.history[0].success, true); assert.deepEqual(s.stock, { herb: 0, ore: 0 });

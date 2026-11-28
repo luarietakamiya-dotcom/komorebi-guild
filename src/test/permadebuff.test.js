@@ -33,6 +33,23 @@ function wipe(t,floor,roll,member="mina") {
   return s;
 }
 
+test("部位欠損と精神崩壊は被害者ごとに発生順で知らせ、同じ症状では再通知しない", t=>{
+  const s = expedition("canal",["mina","gald"]);
+  t.mock.method(Math,"random",()=>.1);
+  visit(s,2,"gallery");
+  visit(s,2,"gallery");
+  visit(s,3,"gallery");
+  assert.deepEqual(s.eventNotices.map(n=>n.personId),["mina","gald","mina","gald"]);
+  for (const [i,notice] of s.eventNotices.entries()) {
+    const p = G.person(s,notice.personId);
+    assert.equal(notice.kind,"injury");
+    assert.ok(notice.message.includes(p.name));
+    assert.match(notice.message,i < 2 ? /脚の欠損/ : /精神崩壊/);
+    assert.ok(p.career.some(e=>e.message===notice.message));
+  }
+  assert.deepEqual(reload(s).eventNotices,s.eventNotices);
+});
+
 test("亜人・人との全滅は捕縛。戦闘不能の判定はゴブリン1％・オーク10％、人は対象外", t=>{
   for (const [floor,roll,pregnant] of [[1,.0099,true],[1,.01,false],[2,.0999,true],[2,.10,false],[3,0,false]]) {
     const s=wipe(t,floor,roll);

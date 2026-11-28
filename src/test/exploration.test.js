@@ -845,6 +845,16 @@ test("死亡限界と骨折の復帰週を表示し、消失後も過去の帰�
   Guild.step(s); Guild.step(s); Guild.reply(s,"pass"); Guild.step(s);
   let game = openGame(JSON.stringify(s));
   assert.match(game.html("#dialog-body"),/骨折（第5週復帰）/);
+  assert.equal(game.element("#event-notice").hidden,true);
+  game.click("reply","return");
+  assert.equal(game.element("#event-notice").hidden,false);
+  assert.match(game.html("#event-notice"),/ポポが重傷（骨折）/);
+  game.click("nav","mail");
+  game.click("notice-open");
+  assert.match(game.html("#dialog-body"),/ポポの人物手帳/);
+  game.escape();
+  assert.match(game.html("#sidebar"),/data-id="mail" aria-current="page"/);
+  assert.deepEqual(game.reload().state().eventNotices,[]);
   Guild.reply(s,"return");
   Guild.nextWeek(s);
   while (!Guild.available(s,p)) Guild.nextWeek(s,true);
@@ -858,6 +868,39 @@ test("死亡限界と骨折の復帰週を表示し、消失後も過去の帰�
   assert.match(game.html("#screen"),/ポポは消失/);
   assert.match(game.html("#screen"),/死亡3回目/);
   assert.match(game.html("#screen"),/永久消失/);
+});
+
+test("特別な来訪は進行を止めず、未確認なら再開後も順に接待・履歴を開ける", () => {
+  const s = Guild.initial();
+  s.metrics[0] = 100;
+  s.raids.nextWeek = 1000;
+  while (s.week < 24) Guild.nextWeek(s,true);
+  const [first,second] = s.eventNotices;
+  let game = openGame(JSON.stringify(s));
+  game.click("nav","shops");
+  assert.match(game.html("#event-notice"),/シュウサイが初めて/);
+  assert.ok(!game.element("#dialog").open);
+  game.click("notice-open");
+  assert.match(game.html("#dialog-body"),/シュウサイの記録/);
+  assert.equal(game.element("#event-notice").hidden,true);
+  game.escape();
+  assert.match(game.html("#sidebar"),/data-id="shops" aria-current="page"/);
+  assert.equal(game.element("#event-notice").hidden,false);
+  game = game.reload();
+  assert.deepEqual(game.state().eventNotices,[second]);
+  assert.ok(game.html("#event-notice").includes(second.message));
+  game.click("notice-open");
+  assert.ok(game.html("#dialog-body").includes(Guild.uniqueGuests[second.personId].name+"の登録票"));
+  assert.match(game.html("#dialog-body"),/専属契約の交渉/);
+  assert.ok(game.state().morningMail.some(m=>m.specialVisit===first.personId));
+  assert.deepEqual(game.state().eventNotices,[]);
+
+  game = openGame(JSON.stringify(s));
+  game.click("notice-dismiss");
+  assert.ok(game.html("#event-notice").includes(second.message));
+  game.click("notice-dismiss");
+  assert.equal(game.element("#event-notice").hidden,true);
+  assert.deepEqual(game.reload().state().eventNotices,[]);
 });
 
 test("遊び方から週の長さを変え、一時停止・再開・再読込を経ても週内の進捗を保つ", () => {

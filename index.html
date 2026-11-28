@@ -192,6 +192,9 @@ select,input:not([type=checkbox]) {border:1px solid #cfcebd;border-radius:6px;pa
 #creator>.fine {margin:9px 0}#voice-preview {margin:13px 0}.help-list {padding-left:25px}.help-list li {padding:6px 0}.help-list p {font-size:13px}
 #toast {position:fixed;bottom:21px;left:50%;transform:translate(-50%,8px);z-index:12;background:#344f3c;color:#fffef4;border-radius:8px;box-shadow:0 3px 17px #2a3e2b24;padding:10px 18px;transition:.15s;opacity:0;pointer-events:none;font-size:13px;max-width:90vw;width:max-content}
 #toast.visible {opacity:1;transform:translate(-50%,0)}
+#event-notice {position:fixed;right:12px;bottom:86px;z-index:5;width:min(350px,calc(100% - 24px));padding:14px 16px;border-color:#889779;box-shadow:0 6px 24px #253c3033}
+#event-notice h2 {font-size:17px}
+#event-notice p {margin:6px 0 12px;overflow-wrap:anywhere}
 .warning {background:#fff1cf;padding:10px;margin-bottom:12px}
 @media(min-width:1550px){.hero{min-height:260px}.dashboard{gap:27px}.quest{grid-template-columns:89px 1fr;padding:18px 20px 0}.item-art{width:89px;height:89px}.party-row{padding:14px 0}}
 @media(max-width:1150px) and (min-width:801px){#sidebar{width:176px;padding-inline:10px}.brand strong{font-size:17px}.brand{gap:6px}.crest{width:32px}.nav-btn{font-size:13px;padding-inline:11px}main{margin-left:176px}.dashboard{grid-template-columns:minmax(0,1.38fr) minmax(250px,1fr);gap:15px}.quest{grid-template-columns:59px 1fr;gap:0 12px;padding:13px 12px 0}.item-art{width:59px;height:63px}.quest-meta{gap:7px;font-size:10px}.quest-meta span .icon{width:12px}.party-members,.party-bottom{margin-inline:0;padding-inline:13px}.hero-copy{padding-left:25px}.section-title h2{font-size:20px}.town-panel{gap:12px;padding-inline:12px}.toto-art{width:76px}.panel-heading{padding-inline:13px}}
@@ -481,6 +484,7 @@ body:not(.stack-demo) #screen {position:relative;padding:0;max-width:none}
 <aside id="sidebar"></aside>
 <main id="content" tabindex="-1"><header id="top"></header><div id="screen"></div></main>
 <dialog id="dialog"><div class="dialog-inner" id="dialog-body"></div></dialog>
+<aside id="event-notice" class="panel" aria-label="重要なお知らせ" aria-live="polite" hidden></aside>
 <div id="toast" role="status"></div>
 <noscript>遊ぶにはブラウザのJavaScriptを有効にしてください。</noscript>
 <script>
@@ -14146,6 +14150,10 @@ const Guild = (() => {
     visits[guest.id] = s.week;
     if (first) record(guest,s.week,message,{firstVisit:true});
     s.morningMail.unshift({week:s.week,sender:guest.name,message,specialVisit:guest.id});
+    queueNotice(s,"visit",guest,jobName(guest.job,guest.sex)+"の"+guest.name+"が"+(first ? "初めて" : "再び")+"町を訪れました。");
+  }
+  function queueNotice(s,kind,p,message) {
+    s.eventNotices.push({kind,personId:p.id,week:s.week,message});
   }
   const visitorList = s => s.registry.filter(p => s.visitors.includes(p.id));
   function startGuestMissions(s) {
@@ -14249,7 +14257,7 @@ const Guild = (() => {
   }
   function initial() {
     const s = {
-      clock:{elapsed:0,paused:false,speed:1}, chatterRate:"quiet", alumni:[], morningMail:[], priority:"safe", decisionWeek:0, leaveWeek:0,
+      clock:{elapsed:0,paused:false,speed:1}, chatterRate:"quiet", alumni:[], morningMail:[], eventNotices:[], priority:"safe", decisionWeek:0, leaveWeek:0,
       guildProfile: profileFor(0), partyProfile: profileFor(1), allowStatReset:true,
       extraParties: [], selectedParty: 1, town: { plots: {}, food: 0, landmark:null, taxHistory:[] }, week: 1, phase: "prep", gold: 240, roster: [
         makePerson("mina", "ミナ", "sword", "bold", "あたし", "casual"),
@@ -14430,6 +14438,7 @@ const Guild = (() => {
       if (/^child-\d+$/.test(p.id)) s.nextChildId = Math.max(s.nextChildId || 1,Number(p.id.slice(6))+1);
     }
     s.morningMail ??= [];
+    s.eventNotices ??= [];
     s.extraParties ??= [];
     s.allowStatReset ??= true;
     const legacyMembers = new Set(s.roster.filter(p => !p.career).map(p => p.id));
@@ -14946,6 +14955,7 @@ const Guild = (() => {
     u.injury = p.injury = {kind,readyWeek:p.readyWeek};
     const message = p.name + "が重傷（" + kind + "）。第" + p.readyWeek + "週の始めまで療養。";
     log(t,message); record(p,s.week,message);
+    queueNotice(s,"injury",p,message);
   }
   function startFight(s, team) {
     const t = team.trip;
@@ -15242,6 +15252,7 @@ const Guild = (() => {
     const message = p.name+"は"+source+"で"+debuffs[kind].name+until+"。";
     record(p,s.week,message);
     log(t,message);
+    if (debuffs[kind].axes.length) queueNotice(s,"injury",p,message);
   }
   function defeatedParty(s,team) {
     const t = team.trip, survivors = t.unit.filter(u => u.state !== "lost");
@@ -17719,6 +17730,35 @@ const action = (id, label, cls = "btn", attrs = "") => `<button type="button" cl
 const tag = (txt, cls = "") => `<span class="tag ${cls}">${txt}</span>`;
 const title = (symbol, txt, end = "") => `<div class="section-title"><h2>${icon(symbol,23)}${txt}</h2>${end}</div>`;
 const cap = (txt, cls = "") => `<span class="caption ${cls}">${txt}</span>`;
+let noticeMarkup = "", recordNotice;
+function noticeDestination(notice) {
+  if (g.person(state,notice.personId)) return "character";
+  if (state.visitors.includes(notice.personId)) return "guest";
+  return "notice-record";
+}
+function refreshNotice() {
+  const panel = $("#event-notice"), notice = state.eventNotices[0];
+  panel.hidden = !notice || !!modal;
+  if (panel.hidden) return;
+  const labels = {character:"人物詳細を見る",guest:"来訪者を接待する","notice-record":"人物の記録を見る"};
+  const markup = `<h2>${notice.kind === "visit" ? "特別な来訪" : "重大な負傷"} <small>第${notice.week}週</small></h2>
+    <p>${esc(notice.message)}</p><div class="actions">${action("notice-open",labels[noticeDestination(notice)],"primary")}${action("notice-dismiss","閉じる")}</div>`;
+  if (markup !== noticeMarkup) panel.innerHTML = noticeMarkup = markup;
+}
+function acknowledgeNotice(open) {
+  const notice = state.eventNotices[0];
+  if (!notice || modal) return;
+  if (open) {
+    const destination = noticeDestination(notice);
+    if (destination === "guest") { guestId = notice.personId; guestOffer = "basic"; }
+    else if (destination === "character") characterId = notice.personId;
+    else recordNotice = notice;
+    showModal(destination);
+  }
+  state.eventNotices.shift();
+  save();
+  refreshNotice();
+}
 function save() {
   if (demo) return;
   rememberProgress();
@@ -18632,6 +18672,7 @@ function sceneChatterRate(kind) {
 }
 let townScene, stopDungeon, previousDrawer, restoringView;
 function render() {
+  refreshNotice();
   const people = townPeople();
   const taxes = g.tourismReport(state);
   const walkers = people.concat(g.visitorList(state).filter(p=>!p.mission).map(p=>({id:p.id,sprite:g.characterArt(p).stack,name:g.familiarName(p),voice:p})),touristWalkers(taxes.visitors));
@@ -18779,6 +18820,7 @@ function advanceExpedition(team) {
     $("#trip-log").innerHTML = logs([...team.trip.log].reverse());
     $(".party-members").innerHTML = team.trip.unit.map(u => partyRow(u.id, u)).join("");
   }
+  refreshNotice();
   scheduleStep();
 }
 function focusEmergency() {
@@ -19073,6 +19115,7 @@ function plotPanel(plot) {
 }
 function showModal(type) {
   modal=type; $("#dialog").setAttribute("aria-labelledby","dialog-title");
+  $("#event-notice").hidden = true;
   if (type==="prepare") {
     const team = selected(), party = team.party.filter(id => g.available(state,who(id)));
     draft = {party,dungeon:team.dungeon,leader:party.includes(team.leader) ? team.leader : party[0],policy:team.policy,meds:team.meds};
@@ -19106,6 +19149,12 @@ function drawModal() {
     updateEditPreview();
   }
   if(modal==="guest") body.innerHTML=guestDetail();
+  if (modal === "notice-record") {
+    const p = who(recordNotice.personId) || state.registry.find(p => p.id === recordNotice.personId);
+    body.innerHTML = modalHead("book",esc(p.name)+"の記録") + `<p>第${recordNotice.week}週　${esc(recordNotice.message)}</p>
+      <p>${esc(p.departure?.message || "この来訪は終了しました。")}</p><h3>活動の履歴</h3>
+      ${p.career.slice().reverse().map(e => `<p>第${e.week}週　${esc(e.message)}</p>`).join("")}`;
+  }
   if(modal==="character") body.innerHTML=characterDetail();
   if(modal==="resident-family") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の交友")+relationshipPanel(who(characterId));
   if(modal==="retirement") body.innerHTML=modalHead("book",esc(who(characterId).name)+"の引退")+
@@ -19241,7 +19290,7 @@ async function readFace(input) {
   } catch(error){input.value="";toast(error.message || "画像を読み込めませんでした。");}
   finally { if(ticket===imageTicket){imageBusy=false;updatePreview();} }
 }
-function closeModal() { $("#dialog").close(); modal=""; }
+function closeModal() { $("#dialog").close(); modal=""; refreshNotice(); }
 let drawerHistory = [];
 function currentView() {
   return {page, party:state.selectedParty, drawerScroll:$("#management")?.scrollTop || 0, windowScroll:window.scrollY || 0};
@@ -19283,6 +19332,8 @@ document.addEventListener("click",event=>{
   const {action:cmd,id}=button.dataset;
   try {
     switch(cmd) {
+      case "notice-open": acknowledgeNotice(true); return;
+      case "notice-dismiss": acknowledgeNotice(false); return;
       case "town-mode": changeTownView(id==="stack"); return;
       case "town-zoom": townScene.stop.setZoom(townZoom + Number(id)*.25); return;
       case "town-turn": changeTownView(true,Number(id)); return;
@@ -19617,6 +19668,7 @@ $("#dialog").addEventListener("cancel",event=>{ if (modal === "urgent") event.pr
 $("#dialog").addEventListener("close",()=>{
   if ($("#dialog").open) return;
   modal="";
+  refreshNotice();
   if (characterId) {
     if (page === "roster") {
       render();

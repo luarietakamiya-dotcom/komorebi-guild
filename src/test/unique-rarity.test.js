@@ -39,6 +39,7 @@ test("全員が候補でも12週に最大1人。初対面を一巡してから�
     s = saved;
   }
   assert.equal(arrivals.length,2 * ids.length);
+  assert.deepEqual(s.eventNotices.map(n=>[n.kind,n.week,n.personId]),arrivals.map(a=>["visit",a.week,a.id]));
   assert.ok(regularCount >= 10 * arrivals.length);
   for (const batch of [arrivals.slice(0,ids.length),arrivals.slice(ids.length)]) {
     assert.deepEqual(new Set(batch.map(a => a.id)),new Set(ids));
@@ -80,7 +81,9 @@ test("旧セーブに滞在中の複数の来訪者と加入済みの仲間を�
   p.career.push({week:18,firstVisit:true,message});
   old.morningMail.push({week:18,sender:p.name,message});
   delete old.uniqueVisitWeeks;
+  delete old.eventNotices;
   const s = reload(old);
+  assert.deepEqual(s.eventNotices,[]);
   assert.deepEqual(s.visitors,old.visitors);
   assert.deepEqual(s.morningMail,old.morningMail);
   assert.deepEqual(s.roster,old.roster);
